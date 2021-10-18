@@ -1,20 +1,14 @@
 import { assert } from "@jsenv/assert"
 
 import { createWorkers } from "@jsenv/worker"
-import { writeWorkerFileFromFunction } from "@jsenv/worker/test/test_helpers.mjs"
 
-const workerFileUrl = new URL("./__worker__.mjs", import.meta.url)
-await writeWorkerFileFromFunction(async () => {
-  throw new Error("HELLO")
-}, workerFileUrl)
-
+const workerFileUrl = new URL("./worker.mjs", import.meta.url)
 const workers = createWorkers({
   workerFileUrl,
   logLevel: "off",
 })
 
 // rejects when worker throws during ajob
-
 try {
   await workers.addJob()
   throw new Error("should throw")

@@ -2,20 +2,13 @@ import "@jsenv/worker/test/abort_controller.mjs"
 import { assert } from "@jsenv/assert"
 
 import { createWorkers } from "@jsenv/worker"
-import { writeWorkerFileFromFunction } from "@jsenv/worker/test/test_helpers.mjs"
 
-const workerFileUrl = new URL("./__worker__.mjs", import.meta.url)
-await writeWorkerFileFromFunction(async () => {
-  await new Promise((resolve) => {
-    setTimeout(resolve, 500)
-  })
-}, workerFileUrl)
-
+const workerFileUrl = new URL("./worker.mjs", import.meta.url)
 const workers = createWorkers({
   workerFileUrl,
   minWorkers: 0,
   maxWorkers: 0,
-  idleTimeout: Infinity,
+  maxIdleDuration: Infinity,
   // logLevel: "debug",
 })
 

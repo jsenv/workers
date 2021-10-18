@@ -1,3 +1,5 @@
+// https://github.com/piscinajs/piscina/tree/master
+
 import { Worker } from "node:worker_threads"
 import { cpus } from "node:os"
 import { createLogger } from "@jsenv/logger"
@@ -21,8 +23,8 @@ export const createWorkers = ({
   maxWorkers = cpuCount * 1.5,
   logLevel = "warn",
   maxWaitingJobs = Number.MAX_SAFE_INTEGER,
+  maxIdleDuration = 0,
   keepProcessAlive = false,
-  idleTimeout = 0,
 }) => {
   workerFileUrl = assertAndNormalizeFileUrl(workerFileUrl)
 
@@ -115,17 +117,17 @@ export const createWorkers = ({
       // keep the min amount of workers alive
       workerCount <= minWorkers ||
       // or if they are allowd to live forever
-      idleTimeout === Infinity
+      maxIdleDuration === Infinity
     ) {
       idleArray.push(worker.__id__)
       return
     }
 
-    // this worker was dynamically added, remove it according to idleTimeout
+    // this worker was dynamically added, remove it according to maxIdleDuration
     idleArray.push(worker.__id__)
     worker.idleAutoRemoveTimeout = setTimeout(() => {
       worker.terminate()
-    }, idleTimeout)
+    }, maxIdleDuration)
     worker.idleAutoRemoveTimeout.unref()
   }
 

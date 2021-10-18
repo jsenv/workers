@@ -3,18 +3,15 @@ import { assert } from "@jsenv/assert"
 import { createWorkers } from "@jsenv/worker"
 
 const workerFileUrl = new URL("./worker.mjs", import.meta.url)
-
 const exceptions = []
 process.on("uncaughtException", (error) => {
   exceptions.push(error)
 })
-
 createWorkers({
   workerFileUrl,
   logLevel: "off",
   minWorkers: 2,
 })
-
 await new Promise((resolve) => setTimeout(resolve, 2000))
 
 const actual = [

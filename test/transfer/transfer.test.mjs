@@ -1,13 +1,8 @@
 import { assert } from "@jsenv/assert"
 
 import { createWorkers } from "@jsenv/worker"
-import { writeWorkerFileFromFunction } from "@jsenv/worker/test/test_helpers.mjs"
 
-const workerFileUrl = new URL("./__worker__.mjs", import.meta.url)
-await writeWorkerFileFromFunction(async () => {
-  return undefined
-}, workerFileUrl)
-
+const workerFileUrl = new URL("./worker.mjs", import.meta.url)
 const workers = createWorkers({
   workerFileUrl,
   // logLevel: "debug",
