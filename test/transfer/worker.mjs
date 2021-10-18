@@ -8,3 +8,4 @@ parentPort.on("message", async (data) => {
   const returnValue = await fn(data)
   parentPort.postMessage(returnValue)
 })
+// parentPort.unref()

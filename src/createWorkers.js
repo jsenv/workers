@@ -63,13 +63,6 @@ export const createWorkers = ({
     }
   }
 
-  const store = (worker) => {
-    workerMap.set(worker.id, worker)
-    if (!keepProcessAlive) {
-      worker.nodeWorker.unref()
-    }
-  }
-
   const forget = (worker) => {
     workerMap.delete(worker.id)
     removeFromArray(busyArray, worker.id)
@@ -93,9 +86,12 @@ export const createWorkers = ({
       errored: false,
       job: null,
     }
-    store(worker)
+    workerMap.set(worker.id, worker)
+    if (!keepProcessAlive) {
+      worker.nodeWorker.unref()
+    }
 
-    worker.nodeWorker.on("error", (error) => {
+    worker.nodeWorker.once("error", (error) => {
       if (worker.job) {
         // already handled by the job
         return
@@ -270,14 +266,15 @@ export const createWorkers = ({
     worker.job = job
     logger.debug(`job #${job.id} assigned to worker #${worker.id}`)
 
+    let onPostMessageError
     const raceWinnerPromise = raceCallbacks({
       timeout: (cb) => {
         if (!job.allocatedMs) {
           return null
         }
-        setTimeout(cb, job.allocatedMs)
+        const timeout = setTimeout(cb, job.allocatedMs)
         return () => {
-          clearTimeout(cb)
+          clearTimeout(timeout)
         }
       },
       abort: (cb) => {
@@ -294,21 +291,35 @@ export const createWorkers = ({
         registerEventCallback(worker.nodeWorker, "messageerror", cb),
       exit: (cb) => registerEventCallback(worker.nodeWorker, "exit", cb),
       message: (cb) => registerEventCallback(worker.nodeWorker, "message", cb),
+      postMessageError: (cb) => {
+        onPostMessageError = cb
+      },
     })
 
     try {
       worker.nodeWorker.postMessage(job.data, job.transferList)
     } catch (e) {
-      kill(worker)
-      // likely e.name ==="DataCloneError"
-      // we call worker.terminate otherwise the process never exits
-      job.onError(e)
-      return
+      onPostMessageError(e) // to ensure other callbacks are removed by raceCallbacks
     }
 
     const winner = await raceWinnerPromise
     worker.job = null
     const callbacks = {
+      postMessageError: (e) => {
+        worker.job = job
+        job.onError(e)
+        // likely e.name ==="DataCloneError"
+        // we call worker.terminate otherwise the process never exits
+        kill(worker)
+      },
+      // uncaught error throw in the worker:
+      // - clear timeout
+      // - calls job.onError, the job promise will be rejected
+      // - worker will be removed by "exit" listener set in "createWorker"
+      error: (error) => {
+        worker.job = job
+        job.onError(error)
+      },
       abort: () => {
         kill(worker)
         job.onAbort("during execution by worker")
@@ -319,14 +330,6 @@ export const createWorkers = ({
         kill(worker)
         // Same here, worker is in the middle of something, kill it
         job.onTimeout()
-      },
-      // uncaught error throw in the worker:
-      // - clear timeout
-      // - calls job.onError, the job promise will be rejected
-      // - worker will be removed by "exit" listener set in "createWorker"
-      error: (error) => {
-        worker.job = job
-        job.onError(error)
       },
       // Error occured while deserializing a message sent by us to the worker
       // - clear timeout
@@ -364,12 +367,6 @@ export const createWorkers = ({
   }
 
   let unregisterSIGINT = () => {}
-  if (handleSIGINT) {
-    unregisterSIGINT = registerEventCallback(process, "SIGINT", () => {
-      unregisterSIGINT()
-      destroy()
-    })
-  }
 
   const destroy = async () => {
     unregisterSIGINT()
@@ -377,7 +374,14 @@ export const createWorkers = ({
     maxWorkers = 0 // so that if any code calls addJob, new worker are not spawned
     jobsWaitingAnAvailableWorker.length = 0
     await terminateAllWorkers()
-    // workerMap.clear() this is to help garbage collect faster but not required
+    workerMap.clear() // this is to help garbage collect faster but not required
+  }
+
+  if (handleSIGINT) {
+    process.once("SIGINT", destroy)
+    unregisterSIGINT = () => {
+      process.removeListener("SIGINT", destroy)
+    }
   }
 
   if (minWorkers > 0) {
