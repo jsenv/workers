@@ -1,6 +1,7 @@
 import { assert } from "@jsenv/assert"
 
 import { createWorkers } from "@jsenv/worker"
+import * as TEST_PARAMS from "@jsenv/worker/test/TEST_PARAMS.mjs"
 
 const workerFileUrl = new URL("./worker.mjs", import.meta.url)
 const exceptions = []
@@ -8,6 +9,7 @@ process.on("uncaughtException", (error) => {
   exceptions.push(error)
 })
 createWorkers({
+  ...TEST_PARAMS,
   workerFileUrl,
   logLevel: "off",
   minWorkers: 2,

@@ -1,9 +1,11 @@
 import { assert } from "@jsenv/assert"
 
 import { createWorkers } from "@jsenv/worker"
+import * as TEST_PARAMS from "@jsenv/worker/test/TEST_PARAMS.mjs"
 
 const workerFileUrl = new URL("./worker.mjs", import.meta.url)
 const workers = createWorkers({
+  ...TEST_PARAMS,
   workerFileUrl,
   maxIdleDuration: 500,
   minWorkers: 1,

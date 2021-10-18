@@ -2,9 +2,11 @@ import "@jsenv/worker/test/abort_controller.mjs"
 import { assert } from "@jsenv/assert"
 
 import { createWorkers } from "@jsenv/worker"
+import * as TEST_PARAMS from "@jsenv/worker/test/TEST_PARAMS.mjs"
 
 const workerFileUrl = new URL("./worker.mjs", import.meta.url)
 const workers = createWorkers({
+  ...TEST_PARAMS,
   workerFileUrl,
   minWorkers: 0,
   maxWorkers: 0,
