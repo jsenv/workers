@@ -3,6 +3,7 @@
  */
 
 import { Worker } from "node:worker_threads"
+import { AsyncResource, executionAsyncId } from "node:async_hooks"
 import { cpus } from "node:os"
 import { createLogger } from "@jsenv/logger"
 import {
@@ -183,37 +184,13 @@ export const createWorkers = ({
         transferList,
         allocatedMs,
         abortSignal,
-        onAbort: (abortTiming) => {
-          reject(new Error(`job #${job.id} aborted ${abortTiming}`))
-        },
-        onError: (error) => {
-          reject(error)
-        },
-        onMessageError: (error) => {
-          reject(error)
-        },
-        onExit: (exitCode) => {
-          reject(
-            new Error(
-              `worker exited: worker #${job.worker.id} exited with code ${exitCode} while performing job #${job.id}.`,
-            ),
-          )
-        },
-        onTimeout: () => {
-          const timeoutError = new Error(
-            `worker timeout: worker #${job.worker.id} is too slow to perform job #${job.id} (takes more than ${allocatedMs} ms)`,
-          )
-          reject(timeoutError)
-        },
-        onMessage: (message) => {
-          logger.debug(`job #${job.id} completed`)
-          resolve(message)
-        },
+        reject,
+        resolve,
       }
       logger.debug(`add a job with id: ${job.id}`)
 
       if (abortSignal && abortSignal.aborted) {
-        job.onAbort("before adding job")
+        reject(new Error(`job #${job.id} already aborted`))
         return
       }
 
@@ -248,7 +225,7 @@ export const createWorkers = ({
           () => {
             unregisterAbort()
             removeFromArray(jobsWaitingAnAvailableWorker, job)
-            job.onAbort("while waiting a worker")
+            reject(new Error(`job#${job.id} aborted while waiting a worker`))
           },
         )
         job.unregisterAbort = unregisterAbort
@@ -265,6 +242,23 @@ export const createWorkers = ({
     job.worker = worker
     worker.job = job
     logger.debug(`job #${job.id} assigned to worker #${worker.id}`)
+
+    const asyncRessource = new AsyncResource(`job#${job.id}`, {
+      triggerAsyncId: executionAsyncId(),
+      requireManualDestroy: true,
+    })
+
+    const resolve = (value) => {
+      asyncRessource.runInAsyncScope(() => {}, null, null, value)
+      asyncRessource.emitDestroy()
+      job.resolve(value)
+    }
+
+    const reject = (e) => {
+      asyncRessource.runInAsyncScope(() => {}, null, e)
+      asyncRessource.emitDestroy()
+      job.reject(e)
+    }
 
     let onPostMessageError
     const raceWinnerPromise = raceCallbacks({
@@ -305,10 +299,11 @@ export const createWorkers = ({
     const winner = await raceWinnerPromise
     worker.job = null
     const callbacks = {
-      postMessageError: (e) => {
+      // likely postMessageError.name ==="DataCloneError"
+      postMessageError: (postMessageError) => {
         worker.job = job
-        job.onError(e)
-        // likely e.name ==="DataCloneError"
+        reject(postMessageError)
+
         // we call worker.terminate otherwise the process never exits
         kill(worker)
       },
@@ -318,40 +313,49 @@ export const createWorkers = ({
       // - worker will be removed by "exit" listener set in "createWorker"
       error: (error) => {
         worker.job = job
-        job.onError(error)
-      },
-      abort: () => {
-        kill(worker)
-        job.onAbort("during execution by worker")
-        // The worker might be in the middle of something
-        // it cannot be reused, we terminate it
-      },
-      timeout: () => {
-        kill(worker)
-        // Same here, worker is in the middle of something, kill it
-        job.onTimeout()
+        reject(error)
       },
       // Error occured while deserializing a message sent by us to the worker
       // - clear timeout
       // - calls job.onMessageError, the job promise will be rejected
       // - indicate worker is about to be idle
       messageerror: (error) => {
-        job.onMessageError(error)
+        reject(error)
         markAsIdle(worker)
+      },
+      abort: () => {
+        // The worker might be in the middle of something
+        // it cannot be reused, we terminate it
+        kill(worker)
+        reject(new Error(`job#${job.id} aborted during execution by worker`))
+      },
+      timeout: () => {
+        // Same here, worker is in the middle of something, kill it
+        kill(worker)
+        reject(
+          new Error(
+            `worker timeout: worker #${job.worker.id} is too slow to perform job #${job.id} (takes more than ${job.allocatedMs} ms)`,
+          ),
+        )
       },
       // Worker exits before emitting a "message" event, this is unexpected
       // - clear timeout
       // - calls job.onExit, the job promise will be rejected
       // - worker will be removed by "exit" listener set in "createWorker"
       exit: (exitCode) => {
-        job.onExit(exitCode)
+        reject(
+          new Error(
+            `worker exited: worker #${job.worker.id} exited with code ${exitCode} while performing job #${job.id}.`,
+          ),
+        )
       },
       // Worker properly respond something
       // - clear timeout
       // - call job.onMessage, the job promise will resolve
       // - indicate worker is about to be idle
       message: (value) => {
-        job.onMessage(value)
+        logger.debug(`job #${job.id} completed`)
+        resolve(value)
         markAsIdle(worker)
       },
     }
