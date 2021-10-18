@@ -22,7 +22,7 @@ _main.mjs:_
 import { createWorkers } from "@jsenv/worker"
 
 const workers = createWorkers({
-  workerFileUrl: new URL("./worker.mjs"),
+  workerFileUrl: new URL("./worker.mjs", import.meta.url),
 })
 
 const value = await workers.addJob({ a: 1, b: 1 })
