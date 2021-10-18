@@ -34,6 +34,7 @@ export const createWorkers = ({
   execArgv,
   argv,
   env,
+  handleSIGINT = true,
 }) => {
   workerFileUrl = assertAndNormalizeFileUrl(workerFileUrl)
 
@@ -362,7 +363,16 @@ export const createWorkers = ({
     )
   }
 
+  let unregisterSIGINT = () => {}
+  if (handleSIGINT) {
+    unregisterSIGINT = registerEventCallback(process, "SIGINT", () => {
+      unregisterSIGINT()
+      destroy()
+    })
+  }
+
   const destroy = async () => {
+    unregisterSIGINT()
     minWorkers = 0 // prevent onWorkerExit() to spawn worker
     maxWorkers = 0 // so that if any code calls addJob, new worker are not spawned
     jobsWaitingAnAvailableWorker.length = 0
