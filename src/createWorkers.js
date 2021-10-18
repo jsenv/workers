@@ -21,13 +21,17 @@ const cpuCount = (() => {
 
 export const createWorkers = ({
   workerFileUrl,
+  workerData,
   // to get a static amount of workers: one must pass minWorkers === maxWorkers
   minWorkers = Math.max(cpuCount / 2, 1),
   maxWorkers = cpuCount * 1.5,
-  logLevel = "warn",
-  maxWaitingJobs = Number.MAX_SAFE_INTEGER,
+  logLevel = "info",
   maxIdleDuration = 0,
+  maxWaitingJobs = Number.MAX_SAFE_INTEGER,
   keepProcessAlive = false,
+  execArgv,
+  argv,
+  env,
 }) => {
   workerFileUrl = assertAndNormalizeFileUrl(workerFileUrl)
 
@@ -78,7 +82,10 @@ export const createWorkers = ({
     const worker = {
       id: workerIdGenerator(),
       nodeWorker: new Worker(workerFilePath, {
-        argv: ["--unhandled-rejections=strict"],
+        workerData,
+        execArgv,
+        argv,
+        env,
       }),
       errored: false,
       job: null,

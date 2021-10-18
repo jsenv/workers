@@ -1,8 +1,8 @@
 {
   "name": "@jsenv/worker",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "private": true,
-  "description": "Worker thread helpers",
+  "description": "Simple worker thread pool",
   "license": "MIT",
   "author": {
     "name": "dmail",
