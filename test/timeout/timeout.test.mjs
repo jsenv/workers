@@ -22,15 +22,10 @@ try {
   // (ideally we should ensure it's not the same worker but not suprt important to test
   // we know the code is calling terminate() so there is no need to test it)
   {
-    const { workerBusyCount, workerIdleCount, jobWaitingCount } =
-      workers.inspect()
-    const actual = {
-      workerBusyCount,
-      workerIdleCount,
-      jobWaitingCount,
-    }
+    const actual = workers.inspect()
     const expected = {
-      workerBusyCount: 1,
+      workerCount: 1,
+      workerBusyCount: 0,
       workerIdleCount: 0,
       jobWaitingCount: 0,
     }
@@ -40,14 +35,9 @@ try {
   await new Promise((resolve) => setTimeout(resolve, 2000))
 
   {
-    const { workerBusyCount, workerIdleCount, jobWaitingCount } =
-      workers.inspect()
-    const actual = {
-      workerBusyCount,
-      workerIdleCount,
-      jobWaitingCount,
-    }
+    const actual = workers.inspect()
     const expected = {
+      workerCount: 2,
       workerBusyCount: 0,
       workerIdleCount: 1,
       jobWaitingCount: 0,

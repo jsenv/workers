@@ -8,6 +8,9 @@ import {
   urlToFileSystemPath,
 } from "@jsenv/filesystem"
 
+import { createIntegerGenerator } from "@jsenv/worker/src/internal/integer_generator.js"
+import { raceCallbacks } from "@jsenv/worker/src/internal/race.js"
+
 const cpuCount = (() => {
   try {
     return cpus().length
@@ -31,46 +34,66 @@ export const createWorkers = ({
   const logger = createLogger({ logLevel })
   const workerFilePath = urlToFileSystemPath(workerFileUrl)
 
-  let previousWorkerId = 0
+  const workerIdGenerator = createIntegerGenerator()
+  const jobIdGenerator = createIntegerGenerator()
+
   const workerMap = new Map()
   const busyArray = []
   const idleArray = []
-  let previousJobId = 0
   const jobsWaitingAnAvailableWorker = []
 
   const inspect = () => {
+    const workerCount = workerMap.size
     const workerBusyCount = busyArray.length
     const workerIdleCount = idleArray.length
     const jobWaitingCount = jobsWaitingAnAvailableWorker.length
 
     return {
+      workerCount,
       workerBusyCount,
       workerIdleCount,
       jobWaitingCount,
     }
   }
 
-  const createWorker = () => {
-    if (previousWorkerId === Number.MAX_SAFE_INTEGER) {
-      previousWorkerId = 0
-    }
-    const workerId = previousWorkerId + 1
-    previousWorkerId = workerId
-
-    const worker = new Worker(workerFilePath, {
-      argv: ["--unhandled-rejections=strict"],
-    })
-    worker.__id__ = workerId
+  const store = (worker) => {
+    workerMap.set(worker.id, worker)
     if (!keepProcessAlive) {
-      worker.unref()
+      worker.nodeWorker.unref()
     }
-    workerMap.set(worker.__id__, worker)
+  }
 
-    worker.on("error", (error) => {
-      worker.__errored__ = true
+  const forget = (worker) => {
+    workerMap.delete(worker.id)
+    removeFromArray(busyArray, worker.id)
+    removeFromArray(idleArray, worker.id)
+  }
+
+  const kill = (worker) => {
+    forget(worker)
+    worker.nodeWorker.terminate()
+  }
+
+  const createWorker = () => {
+    const worker = {
+      id: workerIdGenerator(),
+      nodeWorker: new Worker(workerFilePath, {
+        argv: ["--unhandled-rejections=strict"],
+      }),
+      errored: false,
+      job: null,
+    }
+    store(worker)
+
+    worker.nodeWorker.on("error", (error) => {
+      if (worker.job) {
+        // already handled by the job
+        return
+      }
+      worker.errored = true
       throw error
     })
-    worker.once("exit", () => {
+    worker.nodeWorker.once("exit", () => {
       // happens when:
       // - terminate is called due to error when calling worker.postMessage()
       // - terminate is called by terminateAllWorkers()
@@ -83,34 +106,41 @@ export const createWorkers = ({
       //   to respect "minWorkers" would fail again
       //   And there is no reliable way to know where the error comes from
       logger.debug(`a worker exited, it's not supposed to happen`)
-      onWorkerExit(worker)
+      forget(worker)
+
+      // the worker emitted an "error" event outside the execution of a job
+      // this is not supposed to happen and is used to recognize worker
+      // throwing a top level error. In that case we don't want to create
+      // an other worker that would also throw
+      if (worker.errored) {
+        return
+      }
+
+      const workerCount = workerMap.size
+      if (workerCount >= minWorkers) {
+        return
+      }
+
+      logger.debug("Create a new worker to respect minWorkers")
+      addWorker()
     })
 
     return worker
   }
 
-  const onWorkerExit = (worker) => {
-    workerMap.delete(worker.__id__)
-    removeFromArray(busyArray, worker.__id__)
-    removeFromArray(idleArray, worker.__id__)
-    clearTimeout(worker.idleAutoRemoveTimeout)
-
-    if (!worker.__errored__) {
-      const workerCount = workerMap.size
-      if (workerCount < minWorkers) {
-        logger.debug("Create a new worker to respect minWorkers")
-        const worker = createWorker()
-        onWorkerAboutToBeIdle(worker)
-      }
-    }
-  }
-
-  const onWorkerAboutToBeIdle = (worker) => {
+  const addWorker = () => {
+    const newWorker = createWorker()
     const nextJob = jobsWaitingAnAvailableWorker.shift()
     if (nextJob) {
-      assignJobToWorker(nextJob, worker)
+      assignJobToWorker(nextJob, newWorker)
       return
     }
+    markAsIdle(newWorker)
+  }
+
+  const markAsIdle = (worker) => {
+    removeFromArray(busyArray, worker.id)
+    idleArray.push(worker.id)
 
     const workerCount = workerMap.size
     if (
@@ -119,16 +149,14 @@ export const createWorkers = ({
       // or if they are allowd to live forever
       maxIdleDuration === Infinity
     ) {
-      idleArray.push(worker.__id__)
       return
     }
 
     // this worker was dynamically added, remove it according to maxIdleDuration
-    idleArray.push(worker.__id__)
-    worker.idleAutoRemoveTimeout = setTimeout(() => {
-      worker.terminate()
+    worker.idleKillTimeout = setTimeout(() => {
+      kill(worker)
     }, maxIdleDuration)
-    worker.idleAutoRemoveTimeout.unref()
+    worker.idleKillTimeout.unref()
   }
 
   const addJob = (
@@ -136,14 +164,8 @@ export const createWorkers = ({
     { transferList = [], abortSignal, allocatedMs } = {},
   ) => {
     return new Promise((resolve, reject) => {
-      if (previousJobId === Number.MAX_SAFE_INTEGER) {
-        previousJobId = 0
-      }
-      const jobId = previousJobId + 1
-      previousJobId = jobId
-      logger.debug(`add a job with id: ${jobId}`)
       const job = {
-        id: jobId,
+        id: jobIdGenerator(),
         data: jobData,
         transferList,
         allocatedMs,
@@ -160,13 +182,13 @@ export const createWorkers = ({
         onExit: (exitCode) => {
           reject(
             new Error(
-              `worker exited: worker #${job.worker.__id__} exited with code ${exitCode} while performing job #${job.id}.`,
+              `worker exited: worker #${job.worker.id} exited with code ${exitCode} while performing job #${job.id}.`,
             ),
           )
         },
         onTimeout: () => {
           const timeoutError = new Error(
-            `worker timeout: worker #${job.worker.__id__} is too slow to perform job #${job.id} (takes more than ${allocatedMs} ms)`,
+            `worker timeout: worker #${job.worker.id} is too slow to perform job #${job.id} (takes more than ${allocatedMs} ms)`,
           )
           reject(timeoutError)
         },
@@ -175,16 +197,16 @@ export const createWorkers = ({
           resolve(message)
         },
       }
+      logger.debug(`add a job with id: ${job.id}`)
 
       if (abortSignal && abortSignal.aborted) {
         job.onAbort("before adding job")
         return
       }
 
-      const idleWorkerId = idleArray.shift()
-      if (idleWorkerId) {
+      if (idleArray.length > 0) {
         logger.debug(`a worker is available for that job`)
-        assignJobToWorker(job, workerMap.get(idleWorkerId))
+        assignJobToWorker(job, workerMap.get(idleArray[0]))
         return
       }
 
@@ -221,96 +243,99 @@ export const createWorkers = ({
     })
   }
 
-  const assignJobToWorker = (job, worker) => {
-    clearTimeout(worker.idleAutoRemoveTimeout)
+  const assignJobToWorker = async (job, worker) => {
+    // make worker busy
+    clearTimeout(worker.idleKillTimeout)
+    removeFromArray(idleArray, worker.id)
+    busyArray.push(worker.id)
+
     job.worker = worker
-    busyArray.push(worker.__id__)
-    logger.debug(`job #${job.id} assigned to worker #${worker.__id__}`)
+    worker.job = job
+    logger.debug(`job #${job.id} assigned to worker #${worker.id}`)
 
-    let timeout
-    if (job.allocatedMs) {
-      timeout = setTimeout(async () => {
-        job.onTimeout()
-        await worker.terminate()
-      }, job.allocatedMs)
-    }
-
-    const cleanup = () => {
-      clearTimeout(timeout)
-    }
-
-    // job error is not considered as a worker error
-    // we remove the error listener, this job
-    // will reject in case of "error" and Node.js will terminate
-    // worker, giving a chance to recreate one if the error is catched
-    worker.removeAllListeners("error")
-    if (job.unregisterAbort) job.unregisterAbort()
-    raceEvents([
-      ...(job.abortSignal
-        ? [
-            {
-              eventTarget: job.abortSignal,
-              events: {
-                abort: () => {
-                  cleanup()
-                  job.onAbort("during execution by worker")
-                  // The worker might be in the middle of something
-                  // it cannot be reused, we terminate it
-                  worker.terminate()
-                },
-              },
-            },
-          ]
-        : []),
-      {
-        eventTarget: worker,
-        events: {
-          // uncaught error throw in the worker:
-          // - clear timeout
-          // - calls job.onError, the job promise will be rejected
-          // - worker will be removed by "exit" listener set in "createWorker"
-          error: (error) => {
-            cleanup()
-            job.onError(error)
-          },
-          // Error occured while deserializing a message sent by us to the worker
-          // - clear timeout
-          // - calls job.onMessageError, the job promise will be rejected
-          // - indicate worker is about to be idle
-          messageerror: (error) => {
-            cleanup()
-            job.onMessageError(error)
-            onWorkerAboutToBeIdle(worker)
-          },
-          // Worker exits before emitting a "message" event, this is unexpected
-          // - clear timeout
-          // - calls job.onEarlyExit, the job promise will be rejected
-          // - worker will be removed by "exit" listener set in "createWorker"
-          exit: (exitCode) => {
-            cleanup()
-            job.onExit(exitCode)
-          },
-          // Worker properly respond something
-          // - clear timeout
-          // - call job.onMessage, the job promise will resolve
-          // - indicate worker is about to be idle
-          message: (value) => {
-            cleanup()
-            job.onMessage(value)
-            onWorkerAboutToBeIdle(worker)
-          },
-        },
+    const raceWinnerPromise = raceCallbacks({
+      timeout: (cb) => {
+        if (!job.allocatedMs) {
+          return null
+        }
+        setTimeout(cb, job.allocatedMs)
+        return () => {
+          clearTimeout(cb)
+        }
       },
-    ])
+      abort: (cb) => {
+        if (!job.abortSignal) {
+          return null
+        }
+        // abort now have a new effect: it's not anymore just
+        // removing job from "jobsWaitingAnAvailableWorker"
+        job.unregisterAbort()
+        return registerEventCallback(job.abortSignal, "abort", cb)
+      },
+      error: (cb) => registerEventCallback(worker.nodeWorker, "error", cb),
+      messageerror: (cb) =>
+        registerEventCallback(worker.nodeWorker, "messageerror", cb),
+      exit: (cb) => registerEventCallback(worker.nodeWorker, "exit", cb),
+      message: (cb) => registerEventCallback(worker.nodeWorker, "message", cb),
+    })
 
     try {
-      worker.postMessage(job.data, job.transferList)
+      worker.nodeWorker.postMessage(job.data, job.transferList)
     } catch (e) {
       // likely e.name ==="DataCloneError"
       // we call worker.terminate otherwise the process never exits
-      worker.terminate()
-      throw e
+      job.onError(e)
+      kill(worker)
+      return
     }
+
+    const winner = await raceWinnerPromise
+    worker.job = null
+    const callbacks = {
+      abort: () => {
+        job.onAbort("during execution by worker")
+        // The worker might be in the middle of something
+        // it cannot be reused, we terminate it
+        kill(worker)
+      },
+      timeout: () => {
+        // Same here, worker is in the middle of something, kill it
+        job.onTimeout()
+        kill(worker)
+      },
+      // uncaught error throw in the worker:
+      // - clear timeout
+      // - calls job.onError, the job promise will be rejected
+      // - worker will be removed by "exit" listener set in "createWorker"
+      error: (error) => {
+        worker.job = job
+        job.onError(error)
+      },
+      // Error occured while deserializing a message sent by us to the worker
+      // - clear timeout
+      // - calls job.onMessageError, the job promise will be rejected
+      // - indicate worker is about to be idle
+      messageerror: (error) => {
+        job.onMessageError(error)
+        markAsIdle(worker)
+      },
+      // Worker exits before emitting a "message" event, this is unexpected
+      // - clear timeout
+      // - calls job.onExit, the job promise will be rejected
+      // - worker will be removed by "exit" listener set in "createWorker"
+      exit: (exitCode) => {
+        job.onExit(exitCode)
+      },
+      // Worker properly respond something
+      // - clear timeout
+      // - call job.onMessage, the job promise will resolve
+      // - indicate worker is about to be idle
+      message: (value) => {
+        job.onMessage(value)
+        markAsIdle(worker)
+      },
+    }
+    callbacks[winner.name](winner.data)
   }
 
   const terminateAllWorkers = async () => {
@@ -329,12 +354,15 @@ export const createWorkers = ({
     // workerMap.clear() this is to help garbage collect faster but not required
   }
 
-  logger.debug(`create ${minWorkers} initial workers according to minWorkers`)
-  let i = 1
-  while (i < minWorkers) {
-    const worker = createWorker()
-    onWorkerAboutToBeIdle(worker)
-    i++
+  if (minWorkers > 0) {
+    let numberOfWorkerToCreate = minWorkers
+    logger.debug(
+      `create ${numberOfWorkerToCreate} initial workers according to minWorkers`,
+    )
+    while (numberOfWorkerToCreate--) {
+      const worker = createWorker()
+      markAsIdle(worker)
+    }
   }
 
   return {
@@ -344,35 +372,13 @@ export const createWorkers = ({
     destroy,
 
     // for unit test
-    addWorker: () => {
-      const worker = createWorker()
-      onWorkerAboutToBeIdle(worker)
-    },
+    addWorker,
   }
 }
 
 const removeFromArray = (array, value) => {
   const index = array.indexOf(value)
   array.splice(index, 1)
-}
-
-const raceEvents = (eventRaces) => {
-  const unregisterCallbacks = []
-  eventRaces.forEach(({ eventTarget, events }) => {
-    Object.keys(events).forEach((eventName) => {
-      const unregisterEventCallback = registerEventCallback(
-        eventTarget,
-        eventName,
-        (...args) => {
-          unregisterCallbacks.forEach((unregister) => {
-            unregister()
-          })
-          events[eventName](...args)
-        },
-      )
-      unregisterCallbacks.push(unregisterEventCallback)
-    })
-  })
 }
 
 const registerEventCallback = (object, eventName, callback) => {
