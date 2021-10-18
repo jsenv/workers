@@ -2,7 +2,7 @@
   "name": "@jsenv/worker",
   "version": "1.0.0",
   "private": true,
-  "description": "Simple worker thread pool",
+  "description": "Helps to split CPU intensive code into worker threads",
   "license": "MIT",
   "author": {
     "name": "dmail",

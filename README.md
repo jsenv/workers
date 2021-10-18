@@ -1,5 +1,9 @@
 # jsenv worker [![npm package](https://img.shields.io/npm/v/@jsenv/worker.svg?logo=npm&label=package)](https://www.npmjs.com/package/@jsenv/worker) [![github main](https://github.com/jsenv/worker/workflows/main/badge.svg)](https://github.com/jsenv/worker/actions?workflow=main) [![codecov coverage](https://codecov.io/gh/jsenv/worker/branch/main/graph/badge.svg)](https://codecov.io/gh/jsenv/worker)
 
+Helps to split CPU intensive code into worker threads.
+
+## Example
+
 _worker.mjs:_
 
 ```js
