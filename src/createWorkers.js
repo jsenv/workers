@@ -299,10 +299,10 @@ export const createWorkers = ({
     try {
       worker.nodeWorker.postMessage(job.data, job.transferList)
     } catch (e) {
+      kill(worker)
       // likely e.name ==="DataCloneError"
       // we call worker.terminate otherwise the process never exits
       job.onError(e)
-      kill(worker)
       return
     }
 
@@ -310,15 +310,15 @@ export const createWorkers = ({
     worker.job = null
     const callbacks = {
       abort: () => {
+        kill(worker)
         job.onAbort("during execution by worker")
         // The worker might be in the middle of something
         // it cannot be reused, we terminate it
-        kill(worker)
       },
       timeout: () => {
+        kill(worker)
         // Same here, worker is in the middle of something, kill it
         job.onTimeout()
-        kill(worker)
       },
       // uncaught error throw in the worker:
       // - clear timeout
