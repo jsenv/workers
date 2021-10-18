@@ -90,6 +90,7 @@ export const createWorkers = ({
         // already handled by the job
         return
       }
+      logger.debug(`error on worker #${worker.id}`)
       worker.errored = true
       throw error
     })
@@ -100,28 +101,31 @@ export const createWorkers = ({
       // - terminate is called because job is cancelled while worker is executing
       // - terminate is called because worker timeout during execution
       // - There is a runtime error during job excecution
-      // All cases above should just "debug" things, not even sure anything is needed
+      // -> These cases should be catched by workerMap.has(worker.id)
       // - There is a runtime error during worker execution
-      //   This one is problematic because trying to respawn a worker
-      //   to respect "minWorkers" would fail again
-      //   And there is no reliable way to know where the error comes from
-      logger.debug(`a worker exited, it's not supposed to happen`)
-      forget(worker)
+      if (workerMap.has(worker.id)) {
+        logger.debug(`worker #${worker.id} exited, it's not supposed to happen`)
+        forget(worker)
+      }
 
       // the worker emitted an "error" event outside the execution of a job
       // this is not supposed to happen and is used to recognize worker
       // throwing a top level error. In that case we don't want to create
       // an other worker that would also throw
       if (worker.errored) {
+        logger.debug(`this worker won't be replace (errored flag is true)`)
         return
       }
 
       const workerCount = workerMap.size
       if (workerCount >= minWorkers) {
+        logger.debug(
+          `this worker won't be replaced (there is enough worker already: ${workerCount})`,
+        )
         return
       }
 
-      logger.debug("Create a new worker to respect minWorkers")
+      logger.debug("adding a new worker to replace the one who exited")
       addWorker()
     })
 
@@ -154,6 +158,9 @@ export const createWorkers = ({
 
     // this worker was dynamically added, remove it according to maxIdleDuration
     worker.idleKillTimeout = setTimeout(() => {
+      logger.debug(
+        `killing worker #${worker.id} because idle during more than "maxIdleDuration" (${maxIdleDuration}ms)`,
+      )
       kill(worker)
     }, maxIdleDuration)
     worker.idleKillTimeout.unref()
