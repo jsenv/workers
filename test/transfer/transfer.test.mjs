@@ -9,7 +9,7 @@ const workers = createWorkers({
 })
 
 // transfer array buffer
-{
+if (process.platform !== "darwin") {
   const arrayBuffer = new ArrayBuffer(40)
   await workers.addJob(
     { arrayBuffer },
@@ -23,7 +23,7 @@ const workers = createWorkers({
 }
 
 // cannot transfer functions
-{
+if (process.platform !== "darwin") {
   const fn = () => {}
 
   try {
