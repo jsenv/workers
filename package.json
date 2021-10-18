@@ -43,12 +43,15 @@
     "prepublishOnly": "node ./script/publish/remove_postinstall.mjs",
     "postpublish": "node ./script/publish/restore_postinstall.mjs"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@jsenv/filesystem": "2.2.0",
+    "@jsenv/logger": "4.0.1"
+  },
   "devDependencies": {
     "@babel/core": "7.15.5",
     "@babel/eslint-parser": "7.15.7",
-    "@jsenv/babel-preset": "1.1.0",
     "@jsenv/assert": "2.3.1",
+    "@jsenv/babel-preset": "1.1.0",
     "@jsenv/codecov-upload": "3.5.0",
     "@jsenv/core": "22.2.0",
     "@jsenv/eslint-config": "16.0.6",

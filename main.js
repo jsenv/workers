@@ -4,4 +4,4 @@
  * Ideally this file should be kept simple to help discovering codebase progressively.
  */
 
-export { getMessage, getMessageAsync } from "./src/message.js"
+export { createWorkers } from "./src/createWorkers.js"
