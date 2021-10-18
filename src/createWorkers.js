@@ -25,7 +25,6 @@ const cpuCount = (() => {
 export const createWorkers = ({
   workerFileUrl,
   workerData,
-  // to get a static amount of workers: one must pass minWorkers === maxWorkers
   minWorkers = Math.max(cpuCount / 2, 1),
   maxWorkers = cpuCount * 1.5,
   logLevel = "info",
@@ -243,6 +242,10 @@ export const createWorkers = ({
     worker.job = job
     logger.debug(`job #${job.id} assigned to worker #${worker.id}`)
 
+    // creating an async ressource is important so that Node.js
+    // knows we are doing async stuff
+    // without this the process sometimes hangs forever
+    // https://nodejs.org/dist/latest-v16.x/docs/api/async_context.html#async_context_using_asyncresource_for_a_worker_thread_pool
     const asyncRessource = new AsyncResource(`job#${job.id}`, {
       triggerAsyncId: executionAsyncId(),
       requireManualDestroy: true,
