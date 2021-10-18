@@ -55,9 +55,14 @@ export const createWorkers = async ({
     }
     workerMap.set(worker.threadId, worker)
     worker.once("exit", () => {
+      // except when job is cancelled so we keep debug for now
+      logger.debug(`a worker exited, it's not supposed to happen`)
       removeWorker(worker)
     })
-    worker.once("error", () => {
+    worker.once("error", (e) => {
+      logger.error(`an error occured in a worker, removing it
+--- error stack ---
+${e.stack}`)
       removeWorker(worker)
     })
     return worker
