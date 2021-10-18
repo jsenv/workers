@@ -29,13 +29,14 @@ export const createWorkers = ({
   const logger = createLogger({ logLevel })
   const workerFilePath = urlToFileSystemPath(workerFileUrl)
 
+  let previousWorkerId = 0
   const workerMap = new Map()
   const busyArray = []
   const idleArray = []
   let previousJobId = 0
   const jobsWaitingAnAvailableWorker = []
 
-  const getStatusInfo = () => {
+  const inspect = () => {
     const workerBusyCount = busyArray.length
     const workerIdleCount = idleArray.length
     const jobWaitingCount = jobsWaitingAnAvailableWorker.length
@@ -48,13 +49,19 @@ export const createWorkers = ({
   }
 
   const addWorker = () => {
+    if (previousWorkerId === Number.MAX_SAFE_INTEGER) {
+      previousWorkerId = 0
+    }
+    const workerId = previousWorkerId + 1
+
     const worker = new Worker(workerFilePath, {
       argv: ["--unhandled-rejections=strict"],
     })
+    worker.__id__ = workerId
     if (!keepProcessAlive) {
       worker.unref()
     }
-    workerMap.set(worker.threadId, worker)
+    workerMap.set(worker.__id__, worker)
 
     worker.once("exit", () => {
       // except when job is cancelled so we keep debug for now
@@ -66,9 +73,9 @@ export const createWorkers = ({
   }
 
   const onWorkerExit = (worker) => {
-    workerMap.delete(worker.threadId)
-    removeFromArray(busyArray, worker.threadId)
-    removeFromArray(idleArray, worker.threadId)
+    workerMap.delete(worker.__id__)
+    removeFromArray(busyArray, worker.__id__)
+    removeFromArray(idleArray, worker.__id__)
     clearTimeout(worker.idleAutoRemoveTimeout)
 
     const workerCount = workerMap.size
@@ -93,7 +100,7 @@ export const createWorkers = ({
       // or if they are allowd to live forever
       idleTimeout === Infinity
     ) {
-      idleArray.push(worker.threadId)
+      idleArray.push(worker.__id__)
       return
     }
 
@@ -103,7 +110,7 @@ export const createWorkers = ({
       return
     }
 
-    idleArray.push(worker.threadId)
+    idleArray.push(worker.__id__)
     worker.idleAutoRemoveTimeout = setTimeout(() => {
       worker.terminate()
     })
@@ -118,7 +125,6 @@ export const createWorkers = ({
       if (previousJobId === Number.MAX_SAFE_INTEGER) {
         previousJobId = 0
       }
-
       const jobId = previousJobId + 1
       logger.debug(`add a job with id: ${jobId}`)
       const job = {
@@ -139,13 +145,13 @@ export const createWorkers = ({
         onExit: (exitCode) => {
           reject(
             new Error(
-              `worker exited: worker #${job.worker.threadId} exited with code ${exitCode} while performing job #${job.id}.`,
+              `worker exited: worker #${job.worker.__id__} exited with code ${exitCode} while performing job #${job.id}.`,
             ),
           )
         },
         onTimeout: () => {
           const timeoutError = new Error(
-            `worker timeout: worker #${job.worker.threadId} is too slow to perform job #${job.id} (takes more than ${allocatedMs} ms)`,
+            `worker timeout: worker #${job.worker.__id__} is too slow to perform job #${job.id} (takes more than ${allocatedMs} ms)`,
           )
           reject(timeoutError)
         },
@@ -200,8 +206,8 @@ export const createWorkers = ({
   const assignJobToWorker = (job, worker) => {
     clearTimeout(worker.idleAutoRemoveTimeout)
     job.worker = worker
-    busyArray.push(worker.threadId)
-    logger.debug(`job #${job.id} assigned to worker #${worker.threadId}`)
+    busyArray.push(worker.__id__)
+    logger.debug(`job #${job.id} assigned to worker #${worker.__id__}`)
 
     let timeout
     if (job.allocatedMs) {
@@ -307,7 +313,7 @@ export const createWorkers = ({
   }
 
   return {
-    getStatusInfo,
+    inspect,
     requestJob,
     terminateAllWorkers,
     destroy,
