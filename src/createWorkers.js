@@ -1,6 +1,6 @@
 import { Worker } from "node:worker_threads"
 import { cpus } from "node:os"
-import { createDetailedMessage, createLogger } from "@jsenv/logger"
+import { createLogger } from "@jsenv/logger"
 import {
   assertAndNormalizeFileUrl,
   urlToFileSystemPath,
@@ -48,35 +48,32 @@ export const createWorkers = ({
   }
 
   const addWorker = () => {
-    const worker = new Worker(workerFilePath)
+    const worker = new Worker(workerFilePath, {
+      argv: ["--unhandled-rejections=strict"],
+    })
     if (!keepProcessAlive) {
       worker.unref()
     }
     workerMap.set(worker.threadId, worker)
+
     worker.once("exit", () => {
       // except when job is cancelled so we keep debug for now
       logger.debug(`a worker exited, it's not supposed to happen`)
-      removeWorker(worker)
+      onWorkerExit(worker)
     })
-    worker.once("error", (e) => {
-      logger.error(
-        createDetailedMessage(`an error occured in a worker, removing it`, {
-          "error stack": e.stack,
-        }),
-      )
-      removeWorker(worker)
-    })
+
     return worker
   }
 
-  const removeWorker = (worker) => {
+  const onWorkerExit = (worker) => {
     workerMap.delete(worker.threadId)
     removeFromArray(busyArray, worker.threadId)
     removeFromArray(idleArray, worker.threadId)
     clearTimeout(worker.idleAutoRemoveTimeout)
 
     const workerCount = workerMap.size
-    if (workerCount < maxWorkers) {
+    if (workerCount < minWorkers) {
+      logger.debug("Create a new worker to respect minWorkers")
       const worker = addWorker()
       onWorkerAboutToBeIdle(worker)
     }
@@ -102,14 +99,12 @@ export const createWorkers = ({
 
     // this worker was dynamically added, remove it according to idleTimeout
     if (idleTimeout === 0) {
-      removeWorker(worker)
       worker.terminate()
       return
     }
 
     idleArray.push(worker.threadId)
     worker.idleAutoRemoveTimeout = setTimeout(() => {
-      removeWorker(worker)
       worker.terminate()
     })
     worker.idleAutoRemoveTimeout.unref()
@@ -215,18 +210,23 @@ export const createWorkers = ({
         await worker.terminate()
       }, job.allocatedMs)
     }
+
+    const cleanup = () => {
+      clearTimeout(timeout)
+    }
+
     raceEvents([
       ...(job.abortSignal
         ? [
             {
               eventTarget: job.abortSignal,
               events: {
-                abort: async () => {
-                  clearTimeout(timeout)
+                abort: () => {
+                  cleanup()
                   job.onAbort()
                   // The worker might be in the middle of something
                   // it cannot be reused, we terminate it
-                  await worker.terminate()
+                  worker.terminate()
                 },
               },
             },
@@ -238,9 +238,9 @@ export const createWorkers = ({
           // uncaught error throw in the worker:
           // - clear timeout
           // - calls job.onError, the job promise will be rejected
-          // - worker will be removed by "error" listener set in "addWorker"
+          // - worker will be removed by "exit" listener set in "addWorker"
           error: (error) => {
-            clearTimeout(timeout)
+            cleanup()
             job.onError(error)
           },
           // Error occured while deserializing a message sent by us to the worker
@@ -248,7 +248,7 @@ export const createWorkers = ({
           // - calls job.onMessageError, the job promise will be rejected
           // - indicate worker is about to be idle
           messageerror: (error) => {
-            clearTimeout(timeout)
+            cleanup()
             job.onMessageError(error)
             onWorkerAboutToBeIdle(worker)
           },
@@ -257,7 +257,7 @@ export const createWorkers = ({
           // - calls job.onEarlyExit, the job promise will be rejected
           // - worker will be removed by "exit" listener set in "addWorker"
           exit: (exitCode) => {
-            clearTimeout(timeout)
+            cleanup()
             job.onExit(exitCode)
           },
           // Worker properly respond something
@@ -265,7 +265,7 @@ export const createWorkers = ({
           // - call job.onMessage, the job promise will resolve
           // - indicate worker is about to be idle
           message: (value) => {
-            clearTimeout(timeout)
+            cleanup()
             job.onMessage(value)
             onWorkerAboutToBeIdle(worker)
           },
@@ -292,12 +292,14 @@ export const createWorkers = ({
   }
 
   const destroy = async () => {
-    maxWorkers = 0
+    minWorkers = 0 // prevent onWorkerExit() to spawn worker
+    maxWorkers = 0 // so that if any code calls requestJob, new worker are not spawned
     jobsWaitingAnAvailableWorker.length = 0
     await terminateAllWorkers()
+    // workerMap.clear() this is to help garbage collect faster but not required
   }
 
-  logger.debug(`create ${minWorkers} workers ready to do some job`)
+  logger.debug(`create ${minWorkers} initial workers according to minWorkers`)
   let i = 1
   while (i < minWorkers) {
     addWorker()

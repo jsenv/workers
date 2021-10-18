@@ -48,21 +48,21 @@
     "@jsenv/logger": "4.0.1"
   },
   "devDependencies": {
-    "@babel/core": "7.15.5",
-    "@babel/eslint-parser": "7.15.7",
-    "@jsenv/assert": "2.3.1",
-    "@jsenv/babel-preset": "1.1.0",
+    "@babel/core": "7.15.8",
+    "@babel/eslint-parser": "7.15.8",
+    "@jsenv/assert": "2.3.2",
+    "@jsenv/babel-preset": "1.1.1",
     "@jsenv/codecov-upload": "3.5.0",
-    "@jsenv/core": "22.2.0",
-    "@jsenv/eslint-config": "16.0.6",
+    "@jsenv/core": "23.0.3",
+    "@jsenv/eslint-config": "16.0.8",
     "@jsenv/github-release-package": "1.2.3",
     "@jsenv/importmap-eslint-resolver": "5.1.2",
-    "@jsenv/importmap-node-module": "2.3.1",
+    "@jsenv/importmap-node-module": "2.4.1",
     "@jsenv/package-publish": "1.6.2",
     "@jsenv/performance-impact": "1.7.0",
     "@jsenv/prettier-check-project": "5.6.1",
     "eslint": "7.32.0",
-    "eslint-plugin-import": "2.24.2",
+    "eslint-plugin-import": "2.25.2",
     "prettier": "2.4.1"
   }
 }
