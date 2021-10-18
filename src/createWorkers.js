@@ -187,10 +187,10 @@ export const createWorkers = ({
         reject,
         resolve,
       }
-      logger.debug(`add a job with id: ${job.id}`)
+      logger.debug(`add job#${job.id}`)
 
       if (abortSignal && abortSignal.aborted) {
-        reject(new Error(`job #${job.id} already aborted`))
+        reject(new Error(`job#${job.id} already aborted`))
         return
       }
 

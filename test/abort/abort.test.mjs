@@ -24,7 +24,7 @@ const workers = createWorkers({
     throw new Error("should throw")
   } catch (e) {
     const actual = e.message
-    const expected = `job #1 aborted before adding job`
+    const expected = `job#1 already aborted`
     assert({ actual, expected })
   }
 }
@@ -41,7 +41,7 @@ const workers = createWorkers({
     throw new Error("should throw")
   } catch (e) {
     const actual = e.message
-    const expected = `job #2 aborted while waiting a worker`
+    const expected = `job#2 aborted while waiting a worker`
     assert({ actual, expected })
   }
 }
@@ -59,7 +59,7 @@ const workers = createWorkers({
     throw new Error("should throw")
   } catch (e) {
     const actual = e.message
-    const expected = `job #3 aborted during execution by worker`
+    const expected = `job#3 aborted during execution by worker`
     assert({ actual, expected })
   }
 }
