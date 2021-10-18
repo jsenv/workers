@@ -48,11 +48,12 @@ export const createWorkers = ({
     }
   }
 
-  const addWorker = () => {
+  const createWorker = () => {
     if (previousWorkerId === Number.MAX_SAFE_INTEGER) {
       previousWorkerId = 0
     }
     const workerId = previousWorkerId + 1
+    previousWorkerId = workerId
 
     const worker = new Worker(workerFilePath, {
       argv: ["--unhandled-rejections=strict"],
@@ -63,8 +64,22 @@ export const createWorkers = ({
     }
     workerMap.set(worker.__id__, worker)
 
+    worker.on("error", (error) => {
+      worker.__errored__ = true
+      throw error
+    })
     worker.once("exit", () => {
-      // except when job is cancelled so we keep debug for now
+      // happens when:
+      // - terminate is called due to error when calling worker.postMessage()
+      // - terminate is called by terminateAllWorkers()
+      // - terminate is called because job is cancelled while worker is executing
+      // - terminate is called because worker timeout during execution
+      // - There is a runtime error during job excecution
+      // All cases above should just "debug" things, not even sure anything is needed
+      // - There is a runtime error during worker execution
+      //   This one is problematic because trying to respawn a worker
+      //   to respect "minWorkers" would fail again
+      //   And there is no reliable way to know where the error comes from
       logger.debug(`a worker exited, it's not supposed to happen`)
       onWorkerExit(worker)
     })
@@ -78,11 +93,13 @@ export const createWorkers = ({
     removeFromArray(idleArray, worker.__id__)
     clearTimeout(worker.idleAutoRemoveTimeout)
 
-    const workerCount = workerMap.size
-    if (workerCount < minWorkers) {
-      logger.debug("Create a new worker to respect minWorkers")
-      const worker = addWorker()
-      onWorkerAboutToBeIdle(worker)
+    if (!worker.__errored__) {
+      const workerCount = workerMap.size
+      if (workerCount < minWorkers) {
+        logger.debug("Create a new worker to respect minWorkers")
+        const worker = createWorker()
+        onWorkerAboutToBeIdle(worker)
+      }
     }
   }
 
@@ -105,19 +122,14 @@ export const createWorkers = ({
     }
 
     // this worker was dynamically added, remove it according to idleTimeout
-    if (idleTimeout === 0) {
-      worker.terminate()
-      return
-    }
-
     idleArray.push(worker.__id__)
     worker.idleAutoRemoveTimeout = setTimeout(() => {
       worker.terminate()
-    })
+    }, idleTimeout)
     worker.idleAutoRemoveTimeout.unref()
   }
 
-  const requestJob = (
+  const addJob = (
     jobData,
     { transferList = [], abortSignal, allocatedMs } = {},
   ) => {
@@ -126,6 +138,7 @@ export const createWorkers = ({
         previousJobId = 0
       }
       const jobId = previousJobId + 1
+      previousJobId = jobId
       logger.debug(`add a job with id: ${jobId}`)
       const job = {
         id: jobId,
@@ -133,8 +146,8 @@ export const createWorkers = ({
         transferList,
         allocatedMs,
         abortSignal,
-        onAbort: () => {
-          reject(new Error(`job #${job.id} aborted`))
+        onAbort: (abortTiming) => {
+          reject(new Error(`job #${job.id} aborted ${abortTiming}`))
         },
         onError: (error) => {
           reject(error)
@@ -162,7 +175,7 @@ export const createWorkers = ({
       }
 
       if (abortSignal && abortSignal.aborted) {
-        job.onAbort()
+        job.onAbort("before adding job")
         return
       }
 
@@ -176,7 +189,7 @@ export const createWorkers = ({
       const workerCount = workerMap.size
       if (workerCount < maxWorkers) {
         logger.debug(`adding a worker for that job`)
-        const worker = addWorker()
+        const worker = createWorker()
         assignJobToWorker(job, worker)
         return
       }
@@ -192,13 +205,16 @@ export const createWorkers = ({
       )
       jobsWaitingAnAvailableWorker.push(job)
       if (abortSignal) {
-        abortSignal.addEventListener(
+        const unregisterAbort = registerEventCallback(
+          abortSignal,
           "abort",
           () => {
+            unregisterAbort()
             removeFromArray(jobsWaitingAnAvailableWorker, job)
+            job.onAbort("while waiting a worker")
           },
-          { once: true },
         )
+        job.unregisterAbort = unregisterAbort
       }
     })
   }
@@ -221,6 +237,12 @@ export const createWorkers = ({
       clearTimeout(timeout)
     }
 
+    // job error is not considered as a worker error
+    // we remove the error listener, this job
+    // will reject in case of "error" and Node.js will terminate
+    // worker, giving a chance to recreate one if the error is catched
+    worker.removeAllListeners("error")
+    if (job.unregisterAbort) job.unregisterAbort()
     raceEvents([
       ...(job.abortSignal
         ? [
@@ -229,7 +251,7 @@ export const createWorkers = ({
               events: {
                 abort: () => {
                   cleanup()
-                  job.onAbort()
+                  job.onAbort("during execution by worker")
                   // The worker might be in the middle of something
                   // it cannot be reused, we terminate it
                   worker.terminate()
@@ -244,7 +266,7 @@ export const createWorkers = ({
           // uncaught error throw in the worker:
           // - clear timeout
           // - calls job.onError, the job promise will be rejected
-          // - worker will be removed by "exit" listener set in "addWorker"
+          // - worker will be removed by "exit" listener set in "createWorker"
           error: (error) => {
             cleanup()
             job.onError(error)
@@ -261,7 +283,7 @@ export const createWorkers = ({
           // Worker exits before emitting a "message" event, this is unexpected
           // - clear timeout
           // - calls job.onEarlyExit, the job promise will be rejected
-          // - worker will be removed by "exit" listener set in "addWorker"
+          // - worker will be removed by "exit" listener set in "createWorker"
           exit: (exitCode) => {
             cleanup()
             job.onExit(exitCode)
@@ -299,7 +321,7 @@ export const createWorkers = ({
 
   const destroy = async () => {
     minWorkers = 0 // prevent onWorkerExit() to spawn worker
-    maxWorkers = 0 // so that if any code calls requestJob, new worker are not spawned
+    maxWorkers = 0 // so that if any code calls addJob, new worker are not spawned
     jobsWaitingAnAvailableWorker.length = 0
     await terminateAllWorkers()
     // workerMap.clear() this is to help garbage collect faster but not required
@@ -308,15 +330,22 @@ export const createWorkers = ({
   logger.debug(`create ${minWorkers} initial workers according to minWorkers`)
   let i = 1
   while (i < minWorkers) {
-    addWorker()
+    const worker = createWorker()
+    onWorkerAboutToBeIdle(worker)
     i++
   }
 
   return {
     inspect,
-    requestJob,
+    addJob,
     terminateAllWorkers,
     destroy,
+
+    // for unit test
+    addWorker: () => {
+      const worker = createWorker()
+      onWorkerAboutToBeIdle(worker)
+    },
   }
 }
 
