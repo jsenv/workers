@@ -1,9 +1,8 @@
 import { Worker } from "node:worker_threads"
 import { cpus } from "node:os"
-import { createLogger } from "@jsenv/logger"
+import { createDetailedMessage, createLogger } from "@jsenv/logger"
 import {
   assertAndNormalizeFileUrl,
-  assertFilePresence,
   urlToFileSystemPath,
 } from "@jsenv/filesystem"
 
@@ -15,7 +14,7 @@ const cpuCount = (() => {
   }
 })()
 
-export const createWorkers = async ({
+export const createWorkers = ({
   workerFileUrl,
   // to get a static amount of workers: one must pass minWorkers === maxWorkers
   minWorkers = Math.max(cpuCount / 2, 1),
@@ -23,9 +22,9 @@ export const createWorkers = async ({
   logLevel = "warn",
   maxWaitingJobs = Number.MAX_SAFE_INTEGER,
   keepProcessAlive = false,
+  idleTimeout = 0,
 }) => {
   workerFileUrl = assertAndNormalizeFileUrl(workerFileUrl)
-  await assertFilePresence(workerFileUrl)
 
   const logger = createLogger({ logLevel })
   const workerFilePath = urlToFileSystemPath(workerFileUrl)
@@ -60,9 +59,11 @@ export const createWorkers = async ({
       removeWorker(worker)
     })
     worker.once("error", (e) => {
-      logger.error(`an error occured in a worker, removing it
---- error stack ---
-${e.stack}`)
+      logger.error(
+        createDetailedMessage(`an error occured in a worker, removing it`, {
+          "error stack": e.stack,
+        }),
+      )
       removeWorker(worker)
     })
     return worker
@@ -72,6 +73,7 @@ ${e.stack}`)
     workerMap.delete(worker.threadId)
     removeFromArray(busyArray, worker.threadId)
     removeFromArray(idleArray, worker.threadId)
+    clearTimeout(worker.idleAutoRemoveTimeout)
 
     const workerCount = workerMap.size
     if (workerCount < maxWorkers) {
@@ -84,9 +86,33 @@ ${e.stack}`)
     const nextJob = jobsWaitingAnAvailableWorker.shift()
     if (nextJob) {
       assignJobToWorker(nextJob, worker)
-    } else {
-      idleArray.push(worker.threadId)
+      return
     }
+
+    const workerCount = workerMap.size
+    if (
+      // keep the min amount of workers alive
+      workerCount <= minWorkers ||
+      // or if they are allowd to live forever
+      idleTimeout === Infinity
+    ) {
+      idleArray.push(worker.threadId)
+      return
+    }
+
+    // this worker was dynamically added, remove it according to idleTimeout
+    if (idleTimeout === 0) {
+      removeWorker(worker)
+      worker.terminate()
+      return
+    }
+
+    idleArray.push(worker.threadId)
+    worker.idleAutoRemoveTimeout = setTimeout(() => {
+      removeWorker(worker)
+      worker.terminate()
+    })
+    worker.idleAutoRemoveTimeout.unref()
   }
 
   const requestJob = (
@@ -177,6 +203,7 @@ ${e.stack}`)
   }
 
   const assignJobToWorker = (job, worker) => {
+    clearTimeout(worker.idleAutoRemoveTimeout)
     job.worker = worker
     busyArray.push(worker.threadId)
     logger.debug(`job #${job.id} assigned to worker #${worker.threadId}`)

@@ -8,7 +8,7 @@ await writeWorkerFileFromFunction(async () => {
   return undefined
 }, workerFileUrl)
 
-const workers = await createWorkers({
+const workers = createWorkers({
   workerFileUrl,
   // logLevel: "debug",
 })

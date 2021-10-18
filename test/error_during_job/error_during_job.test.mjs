@@ -8,7 +8,7 @@ await writeWorkerFileFromFunction(async () => {
   throw new Error("HELLO")
 }, workerFileUrl)
 
-const workers = await createWorkers({
+const workers = createWorkers({
   workerFileUrl,
   logLevel: "off",
 })
