@@ -359,6 +359,7 @@ export const createWorkers = ({
   }
 
   const terminateAllWorkers = async () => {
+    logger.debug(`terminal all workers`)
     await Promise.allSettled(
       Array.from(workerMap.values()).map(async (worker) => {
         await worker.terminate()
@@ -378,16 +379,20 @@ export const createWorkers = ({
   }
 
   if (handleSIGINT) {
-    process.once("SIGINT", destroy)
+    const SIGINTCallback = () => {
+      logger.debug(`SIGINT`)
+      destroy()
+    }
+    process.once("SIGINT", SIGINTCallback)
     unregisterSIGINT = () => {
-      process.removeListener("SIGINT", destroy)
+      process.removeListener("SIGINT", SIGINTCallback)
     }
   }
 
   if (minWorkers > 0) {
     let numberOfWorkerToCreate = minWorkers
     logger.debug(
-      `create ${numberOfWorkerToCreate} initial workers according to minWorkers`,
+      `create ${numberOfWorkerToCreate} initial worker(s) according to "minWorkers"`,
     )
     while (numberOfWorkerToCreate--) {
       const worker = createWorker()
