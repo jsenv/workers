@@ -42,9 +42,8 @@ const measureWorkerThreads = async ({ iterations = 5 } = {}) => {
         workerFileUrl: new URL("./transform_worker.mjs", import.meta.url),
         minWorkers: 5,
         maxWorkers: 5,
-        maxIdleDuration: 100,
-        logLevel: "debug",
       })
+      await new Promise((resolve) => setTimeout(resolve, 500))
 
       const startMs = Date.now()
       await Promise.all(
@@ -54,8 +53,6 @@ const measureWorkerThreads = async ({ iterations = 5 } = {}) => {
       )
       const endMs = Date.now()
       const msEllapsed = endMs - startMs
-
-      workers.destroy()
 
       return {
         "time to transform files on worker threads": {
