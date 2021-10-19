@@ -19,7 +19,6 @@ import {
   setupTransformCalls,
   loadBabelPluginMapFromFile,
 } from "./babel_transform_utils.mjs"
-import { transform } from "./transform.mjs"
 
 const measureWorkerThreads = async ({ iterations = 5 } = {}) => {
   const metrics = await measurePerformanceMultipleTimes(
@@ -32,25 +31,41 @@ const measureWorkerThreads = async ({ iterations = 5 } = {}) => {
       const babelPluginMap = await loadBabelPluginMapFromFile({
         projectDirectoryUrl,
       })
+      const babelPluginConfig = {}
+      Object.keys(babelPluginMap).forEach((key) => {
+        babelPluginConfig[key] = babelPluginMap[key].options
+      })
+      transformCalls.forEach((call) => {
+        call.babelPluginConfig = babelPluginConfig
+      })
+      const workers = createWorkers({
+        workerFileUrl: new URL("./transform_worker.mjs", import.meta.url),
+        minWorkers: 5,
+        maxWorkers: 5,
+        maxIdleDuration: 100,
+        logLevel: "debug",
+      })
 
       const startMs = Date.now()
       await Promise.all(
         transformCalls.map(async (call) => {
-          await transform(call)
+          await workers.addJob(call)
         }),
       )
       const endMs = Date.now()
       const msEllapsed = endMs - startMs
 
+      workers.destroy()
+
       return {
-        "time to transform files on main thread": {
+        "time to transform files on worker threads": {
           value: msEllapsed,
           unit: "ms",
         },
       }
     },
     iterations,
-    { msToWaitBetweenEachMeasure: 100 },
+    { msToWaitBetweenEachMeasure: 500 },
   )
   return computeMetricsMedian(metrics)
 }
