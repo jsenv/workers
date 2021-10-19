@@ -14,13 +14,15 @@ import {
   logPerformanceMetrics,
 } from "@jsenv/performance-impact"
 
+import { createWorkers } from "@jsenv/workers"
 import {
   setupTransformCalls,
   loadBabelPluginMapFromFile,
 } from "./babel_transform_utils.mjs"
-import { transform } from "./transform.mjs"
 
-const measureMainThread = async ({ iterations = 5 } = {}) => {
+const measureBabelTransformOnWorkerThreads = async ({
+  iterations = 5,
+} = {}) => {
   const metrics = await measurePerformanceMultipleTimes(
     async () => {
       const projectDirectoryUrl = new URL("./", import.meta.url)
@@ -31,24 +33,36 @@ const measureMainThread = async ({ iterations = 5 } = {}) => {
       const babelPluginMap = await loadBabelPluginMapFromFile({
         projectDirectoryUrl,
       })
-      transformCalls.forEach((call) => {
-        call.babelPluginMap = babelPluginMap
+      const babelPluginConfig = {}
+      Object.keys(babelPluginMap).forEach((key) => {
+        babelPluginConfig[key] = babelPluginMap[key].options
       })
+      transformCalls.forEach((call) => {
+        call.babelPluginConfig = babelPluginConfig
+      })
+      const workerCount = 1
+      const workers = createWorkers({
+        workerFileUrl: new URL("./transform_worker.mjs", import.meta.url),
+        minWorkers: workerCount,
+        maxWorkers: workerCount,
+      })
+      await new Promise((resolve) => setTimeout(resolve, 500))
 
       const startMs = Date.now()
       await Promise.all(
         transformCalls.map(async (call) => {
-          await transform(call)
+          await workers.addJob(call)
         }),
       )
       const endMs = Date.now()
       const msEllapsed = endMs - startMs
 
       return {
-        [`time to transform ${transformCalls.length} files on main thread`]: {
-          value: msEllapsed,
-          unit: "ms",
-        },
+        [`time to transform ${transformCalls.length} files using ${workerCount} workers`]:
+          {
+            value: msEllapsed,
+            unit: "ms",
+          },
       }
     },
     iterations,
@@ -57,8 +71,10 @@ const measureMainThread = async ({ iterations = 5 } = {}) => {
   return computeMetricsMedian(metrics)
 }
 
-const executeAndLog = process.argv.includes("--local")
+const executeAndLog = process.argv.includes("--local") || true
 if (executeAndLog) {
-  const performanceMetrics = await measureMainThread({ iterations: 1 })
+  const performanceMetrics = await measureBabelTransformOnWorkerThreads({
+    iterations: 1,
+  })
   logPerformanceMetrics(performanceMetrics)
 }

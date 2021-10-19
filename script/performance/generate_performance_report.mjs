@@ -20,13 +20,27 @@ export const generatePerformanceReport = async () => {
   const { measureNpmTarball } = await import(
     "./measure_npm_tarball/measure_npm_tarball.mjs"
   )
-  const { measureMainThread } = await import(
-    "./babel_transform/measure_main_thread.mjs"
+  const { measurePrimesOnMainThread } = await import(
+    "./primes/primes_main_thread.mjs"
+  )
+  const { measurePrimesOnWorkerThreads } = await import(
+    "./primes/primes_worker_threads.mjs"
+  )
+  const { measureBabelTransformOnMainThread } = await import(
+    "./babel_transform/babel_transform_main_thread.mjs"
+  )
+  const { measureBabelTransformOnWorkerThreads } = await import(
+    "./babel_transform/babel_transform_worker_threads.mjs"
   )
 
   const importMetrics = await measureImport()
   const npmTarballMetrics = await measureNpmTarball()
-  const mainThreadMetrics = await measureMainThread()
+  const primesMainThreadMetrics = await measurePrimesOnMainThread()
+  const primesOnWorkerThreads = await measurePrimesOnWorkerThreads()
+  const babelTransformMainThreadMetrics =
+    await measureBabelTransformOnMainThread()
+  const babelTransformOnWorkerThreads =
+    await measureBabelTransformOnWorkerThreads()
 
   return {
     groups: {
@@ -34,8 +48,13 @@ export const generatePerformanceReport = async () => {
         ...importMetrics,
         ...npmTarballMetrics,
       },
+      "prime numbers metrics": {
+        ...primesMainThreadMetrics,
+        ...primesOnWorkerThreads,
+      },
       "babel transform metrics": {
-        ...mainThreadMetrics,
+        ...babelTransformMainThreadMetrics,
+        ...babelTransformOnWorkerThreads,
       },
     },
   }
@@ -45,5 +64,8 @@ const executeAndLog = process.argv.includes("--local")
 if (executeAndLog) {
   await import("./measure_import/measure_import.mjs")
   await import("./measure_npm_tarball/measure_npm_tarball.mjs")
-  await import("./babel_transform/measure_main_thread.mjs")
+  await import("./primes/primes_main_thread.mjs")
+  await import("./primes/primes_worker_threads.mjs")
+  await import("./babel_transform/babel_transform_main_thread.mjs")
+  await import("./babel_transform/babel_transform_worker_threads.mjs")
 }
