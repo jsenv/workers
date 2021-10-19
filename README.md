@@ -1,6 +1,6 @@
-# jsenv worker [![npm package](https://img.shields.io/npm/v/@jsenv/worker.svg?logo=npm&label=package)](https://www.npmjs.com/package/@jsenv/worker) [![github main](https://github.com/jsenv/worker/workflows/main/badge.svg)](https://github.com/jsenv/worker/actions?workflow=main) [![codecov coverage](https://codecov.io/gh/jsenv/worker/branch/main/graph/badge.svg)](https://codecov.io/gh/jsenv/worker)
+# jsenv workers [![npm package](https://img.shields.io/npm/v/@jsenv/workers.svg?logo=npm&label=package)](https://www.npmjs.com/package/@jsenv/workers) [![github main](https://github.com/jsenv/workers/workflows/main/badge.svg)](https://github.com/jsenv/workers/actions?workflow=main) [![codecov coverage](https://codecov.io/gh/jsenv/workers/branch/main/graph/badge.svg)](https://codecov.io/gh/jsenv/workers)
 
-Helps to split CPU intensive code into worker threads.
+Split CPU intensive code into worker threads.
 
 ## Example
 
@@ -19,7 +19,7 @@ parentPort.on("message", async ({ a, b }) => {
 _main.mjs:_
 
 ```js
-import { createWorkers } from "@jsenv/worker"
+import { createWorkers } from "@jsenv/workers"
 
 const workers = createWorkers({
   workerFileUrl: new URL("./worker.mjs"),
@@ -34,7 +34,7 @@ console.log(value) // 2
 By default the pool size is dynamic but it can be fixed to X workers.
 
 ```js
-import { createWorkers } from "@jsenv/worker"
+import { createWorkers } from "@jsenv/workers"
 
 const workers = createWorkers({
   workerFileUrl: new URL("./worker.mjs"),

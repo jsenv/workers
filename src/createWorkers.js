@@ -11,8 +11,8 @@ import {
   urlToFileSystemPath,
 } from "@jsenv/filesystem"
 
-import { createIntegerGenerator } from "@jsenv/worker/src/internal/integer_generator.js"
-import { raceCallbacks } from "@jsenv/worker/src/internal/race.js"
+import { createIntegerGenerator } from "@jsenv/workers/src/internal/integer_generator.js"
+import { raceCallbacks } from "@jsenv/workers/src/internal/race.js"
 
 const cpuCount = (() => {
   try {

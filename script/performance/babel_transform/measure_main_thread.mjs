@@ -52,10 +52,13 @@ const measureMainThread = async ({ iterations = 5 } = {}) => {
       }
     },
     iterations,
-    { msToWaitBetweenEachMeasure: 100 },
+    { msToWaitBetweenEachMeasure: 500 },
   )
   return computeMetricsMedian(metrics)
 }
 
-const performanceMetrics = await measureMainThread({ iterations: 1 })
-logPerformanceMetrics(performanceMetrics)
+const executeAndLog = process.argv.includes("--local")
+if (executeAndLog) {
+  const performanceMetrics = await measureMainThread({ iterations: 1 })
+  logPerformanceMetrics(performanceMetrics)
+}

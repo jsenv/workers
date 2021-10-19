@@ -1,5 +1,5 @@
-import { createWorkers } from "@jsenv/worker"
-import * as TEST_PARAMS from "@jsenv/worker/test/TEST_PARAMS.mjs"
+import { createWorkers } from "@jsenv/workers"
+import * as TEST_PARAMS from "@jsenv/workers/test/TEST_PARAMS.mjs"
 
 // const { createRequire } = await import("node:module")
 // const require = createRequire(import.meta.url)

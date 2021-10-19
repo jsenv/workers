@@ -1,8 +1,8 @@
 {
-  "name": "@jsenv/worker",
+  "name": "@jsenv/workers",
   "version": "1.0.0",
   "private": true,
-  "description": "Helps to split CPU intensive code into worker threads",
+  "description": "Split CPU intensive code into worker threads",
   "license": "MIT",
   "author": {
     "name": "dmail",
@@ -11,7 +11,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/jsenv/worker"
+    "url": "https://github.com/jsenv/workers"
   },
   "engines": {
     "node": ">=14.17.0"

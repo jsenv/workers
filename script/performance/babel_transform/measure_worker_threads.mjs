@@ -8,4 +8,55 @@
  * Once this is ready we write a version using workers and compare the metrics
  */
 
- 
+import {
+  measurePerformanceMultipleTimes,
+  computeMetricsMedian,
+  logPerformanceMetrics,
+} from "@jsenv/performance-impact"
+
+import { createWorkers } from "@jsenv/workers"
+import {
+  setupTransformCalls,
+  loadBabelPluginMapFromFile,
+} from "./babel_transform_utils.mjs"
+import { transform } from "./transform.mjs"
+
+const measureWorkerThreads = async ({ iterations = 5 } = {}) => {
+  const metrics = await measurePerformanceMultipleTimes(
+    async () => {
+      const projectDirectoryUrl = new URL("./", import.meta.url)
+      const transformCalls = await setupTransformCalls()
+      // we know babel plugin map before hand
+      // in the worker approach we'll need pass only the names
+      // and require them in the worker
+      const babelPluginMap = await loadBabelPluginMapFromFile({
+        projectDirectoryUrl,
+      })
+
+      const startMs = Date.now()
+      await Promise.all(
+        transformCalls.map(async (call) => {
+          await transform(call)
+        }),
+      )
+      const endMs = Date.now()
+      const msEllapsed = endMs - startMs
+
+      return {
+        "time to transform files on main thread": {
+          value: msEllapsed,
+          unit: "ms",
+        },
+      }
+    },
+    iterations,
+    { msToWaitBetweenEachMeasure: 100 },
+  )
+  return computeMetricsMedian(metrics)
+}
+
+const executeAndLog = process.argv.includes("--local") || true
+if (executeAndLog) {
+  const performanceMetrics = await measureWorkerThreads({ iterations: 1 })
+  logPerformanceMetrics(performanceMetrics)
+}

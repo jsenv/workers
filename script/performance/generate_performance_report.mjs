@@ -20,15 +20,22 @@ export const generatePerformanceReport = async () => {
   const { measureNpmTarball } = await import(
     "./measure_npm_tarball/measure_npm_tarball.mjs"
   )
+  const { measureMainThread } = await import(
+    "./babel_transform/measure_main_thread.mjs"
+  )
 
   const importMetrics = await measureImport()
   const npmTarballMetrics = await measureNpmTarball()
+  const mainThreadMetrics = await measureMainThread()
 
   return {
     groups: {
-      "@jsenv/template-node-package metrics": {
+      "package metrics": {
         ...importMetrics,
         ...npmTarballMetrics,
+      },
+      "babel transform metrics": {
+        ...mainThreadMetrics,
       },
     },
   }
@@ -38,4 +45,5 @@ const executeAndLog = process.argv.includes("--local")
 if (executeAndLog) {
   await import("./measure_import/measure_import.mjs")
   await import("./measure_npm_tarball/measure_npm_tarball.mjs")
+  await import("./babel_transform/measure_main_thread.mjs")
 }
