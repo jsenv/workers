@@ -38,10 +38,11 @@ const measureWorkerThreads = async ({ iterations = 5 } = {}) => {
       transformCalls.forEach((call) => {
         call.babelPluginConfig = babelPluginConfig
       })
+      const workerCount = 1
       const workers = createWorkers({
         workerFileUrl: new URL("./transform_worker.mjs", import.meta.url),
-        minWorkers: 5,
-        maxWorkers: 5,
+        minWorkers: workerCount,
+        maxWorkers: workerCount,
       })
       await new Promise((resolve) => setTimeout(resolve, 500))
 
@@ -55,10 +56,11 @@ const measureWorkerThreads = async ({ iterations = 5 } = {}) => {
       const msEllapsed = endMs - startMs
 
       return {
-        "time to transform files on worker threads": {
-          value: msEllapsed,
-          unit: "ms",
-        },
+        [`time to transform ${transformCalls.length} files using ${workerCount} workers`]:
+          {
+            value: msEllapsed,
+            unit: "ms",
+          },
       }
     },
     iterations,

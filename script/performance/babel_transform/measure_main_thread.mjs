@@ -45,7 +45,7 @@ const measureMainThread = async ({ iterations = 5 } = {}) => {
       const msEllapsed = endMs - startMs
 
       return {
-        "time to transform files on main thread": {
+        [`time to transform ${transformCalls.length} files on main thread`]: {
           value: msEllapsed,
           unit: "ms",
         },
