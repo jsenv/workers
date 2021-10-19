@@ -12,6 +12,7 @@ createWorkers({
   minWorkers: 1,
   logLevel: "debug",
   handleSIGINT: false,
+  maxIdleDuration: Infinity,
 })
 
 // setTimeout(() => {

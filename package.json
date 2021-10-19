@@ -34,17 +34,19 @@
     "eslint-check": "node ./node_modules/eslint/bin/eslint.js . --ext=.js,.mjs",
     "generate-importmap": "node ./script/importmap/generate_importmap.mjs",
     "measure-performances": "node --expose-gc ./script/performance/generate_performance_report.mjs --local",
+    "measure-main-thread-performances": "node ./script/performances/babel_transform/measure_main_thread.mjs --local",
     "test": "node ./script/test/test.mjs",
     "test-with-coverage": "npm run test -- --coverage",
     "prettier-format": "node ./script/prettier/prettier_format.mjs",
     "prettier-format-stage": "npm run prettier-format -- --staged",
     "prettier-check": "npm run prettier-format -- --dry-run",
-    "postinstall": "npm run generate-importmap",
+    "packages-install": "node ./script/packages/packages_install.js",
+    "postinstall": "npm run generate-importmap && npm run packages-install",
     "prepublishOnly": "node ./script/publish/remove_postinstall.mjs",
     "postpublish": "node ./script/publish/restore_postinstall.mjs"
   },
   "dependencies": {
-    "@jsenv/filesystem": "2.2.0",
+    "@jsenv/filesystem": "2.3.1",
     "@jsenv/logger": "4.0.1"
   },
   "devDependencies": {
