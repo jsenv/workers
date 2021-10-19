@@ -39,7 +39,7 @@ export const loadApp = async () => {
 }
 
 const importApp = async ({ onJsReady = () => {} }) => {
-  const app = await import("../app/app.js")
+  const app = await import("./app.js")
   onJsReady()
   return app
 }
