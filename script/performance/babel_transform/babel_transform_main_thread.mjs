@@ -34,6 +34,7 @@ const measureBabelTransformOnMainThread = async ({ iterations = 5 } = {}) => {
       transformCalls.forEach((call) => {
         call.babelPluginMap = babelPluginMap
       })
+      await new Promise((resolve) => setTimeout(resolve, 500))
 
       const startMs = Date.now()
       await Promise.all(

@@ -21,6 +21,11 @@ import {
 } from "./babel_transform_utils.mjs"
 import { arrayBufferFromString } from "./array_buffer_conversion.mjs"
 
+// 1 worker -> perf better than main thread
+// more than 1 worker -> perf worse than main thread
+// ¯\_(ツ)_/¯
+const WORKERS_COUNT = 1
+
 const measureBabelTransformOnWorkerThreads = async ({
   iterations = 5,
 } = {}) => {
@@ -44,11 +49,11 @@ const measureBabelTransformOnWorkerThreads = async ({
         call.buffer = arrayBufferFromString(call.code)
         delete call.code
       })
-      const workerCount = 5
       const workers = createWorkers({
         workerFileUrl: new URL("./transform_worker.mjs", import.meta.url),
-        minWorkers: workerCount,
-        maxWorkers: workerCount,
+        minWorkers: WORKERS_COUNT,
+        maxWorkers: WORKERS_COUNT,
+        maxIdleDuration: 2000,
       })
       await new Promise((resolve) => setTimeout(resolve, 500))
 
@@ -62,7 +67,7 @@ const measureBabelTransformOnWorkerThreads = async ({
       const msEllapsed = endMs - startMs
 
       return {
-        [`time to transform ${transformCalls.length} files using ${workerCount} workers`]:
+        [`time to transform ${transformCalls.length} files using ${WORKERS_COUNT} workers`]:
           {
             value: msEllapsed,
             unit: "ms",
