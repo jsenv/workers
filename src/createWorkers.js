@@ -140,17 +140,22 @@ export const createWorkers = ({
 
   const addWorker = () => {
     const newWorker = createWorker()
+    tryToGoIdle(newWorker)
+  }
+
+  const tryToGoIdle = (worker) => {
     const nextJob = jobsWaitingAnAvailableWorker.shift()
     if (nextJob) {
-      assignJobToWorker(nextJob, newWorker)
+      assignJobToWorker(nextJob, worker)
       return
     }
-    markAsIdle(newWorker)
+    markAsIdle(worker)
   }
 
   const markAsIdle = (worker) => {
     removeFromArray(busyArray, worker.id)
     idleArray.push(worker.id)
+    logger.debug(`worker#${worker.id} marked as "idle"`)
 
     const workerCount = workerMap.size
     if (
@@ -324,7 +329,7 @@ export const createWorkers = ({
       // - indicate worker is about to be idle
       messageerror: (error) => {
         reject(error)
-        markAsIdle(worker)
+        tryToGoIdle(worker)
       },
       abort: () => {
         // The worker might be in the middle of something
@@ -359,7 +364,7 @@ export const createWorkers = ({
       message: (value) => {
         logger.debug(`job #${job.id} completed`)
         resolve(value)
-        markAsIdle(worker)
+        tryToGoIdle(worker)
       },
     }
     callbacks[winner.name](winner.data)
