@@ -19,6 +19,7 @@ import {
   setupTransformCalls,
   loadBabelPluginMapFromFile,
 } from "./babel_transform_utils.mjs"
+import { arrayBufferFromString } from "./array_buffer_conversion.mjs"
 
 const measureBabelTransformOnWorkerThreads = async ({
   iterations = 5,
@@ -37,10 +38,13 @@ const measureBabelTransformOnWorkerThreads = async ({
       Object.keys(babelPluginMap).forEach((key) => {
         babelPluginConfig[key] = babelPluginMap[key].options
       })
+
       transformCalls.forEach((call) => {
         call.babelPluginConfig = babelPluginConfig
+        call.buffer = arrayBufferFromString(call.code)
+        delete call.code
       })
-      const workerCount = 1
+      const workerCount = 5
       const workers = createWorkers({
         workerFileUrl: new URL("./transform_worker.mjs", import.meta.url),
         minWorkers: workerCount,
@@ -50,8 +54,8 @@ const measureBabelTransformOnWorkerThreads = async ({
 
       const startMs = Date.now()
       await Promise.all(
-        transformCalls.map(async (call) => {
-          await workers.addJob(call)
+        transformCalls.map(async ({ buffer, ...call }) => {
+          await workers.addJob(call, [buffer])
         }),
       )
       const endMs = Date.now()
@@ -71,7 +75,7 @@ const measureBabelTransformOnWorkerThreads = async ({
   return computeMetricsMedian(metrics)
 }
 
-const executeAndLog = process.argv.includes("--local") || true
+const executeAndLog = process.argv.includes("--local")
 if (executeAndLog) {
   const performanceMetrics = await measureBabelTransformOnWorkerThreads({
     iterations: 1,

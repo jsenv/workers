@@ -1,16 +1,21 @@
 import { parentPort } from "node:worker_threads"
 import { createRequire } from "node:module"
+import {
+  stringFromArrayBuffer,
+  arrayBufferFromString,
+} from "./array_buffer_conversion.mjs"
 import { transform } from "./transform.mjs"
 
 const require = createRequire(import.meta.url)
 
-parentPort.on("message", async ({ babelPluginConfig, ...rest }) => {
+parentPort.on("message", async ({ babelPluginConfig, buffer, ...rest }) => {
   const babelPluginMap = babelPluginMapFromBabelPluginConfig(babelPluginConfig)
   const { code, map, metadata } = await transform({
     babelPluginMap,
+    code: stringFromArrayBuffer(buffer),
     ...rest,
   })
-  parentPort.postMessage({ code, map, metadata })
+  parentPort.postMessage({ map, metadata }, [arrayBufferFromString(code)])
 })
 
 const babelPluginMapFromBabelPluginConfig = (babelPluginConfig) => {
