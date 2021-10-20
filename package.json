@@ -1,6 +1,6 @@
 {
   "name": "@jsenv/workers",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Split CPU intensive code into worker threads",
   "license": "MIT",
   "author": {

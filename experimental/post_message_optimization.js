@@ -1,7 +1,12 @@
+/**
+ * A stupid experiment trying to see if converting data into array buffer
+ * improves speed (of course not)
+ */
+
 import {
   arrayBufferFromBuffer,
   bufferFromArrayBuffer,
-} from "./internal/array_buffer_conversion.js"
+} from "@jsenv/workers/src/internal/array_buffer_conversion.js"
 
 // https://developer.mozilla.org/en-US/docs/Web/API/Worker/postMessage
 // https://nodejs.org/api/worker_threads.html#portpostmessagevalue-transferlist

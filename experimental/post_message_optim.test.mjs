@@ -3,7 +3,7 @@ import { assert } from "@jsenv/assert"
 import {
   optimizeValueForPostMessage,
   recomposeValueFromPostMessage,
-} from "@jsenv/workers"
+} from "./post_message_optimization.js"
 
 // undefined
 {
