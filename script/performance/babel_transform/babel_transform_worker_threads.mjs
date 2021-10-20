@@ -13,13 +13,18 @@ import {
   computeMetricsMedian,
   logPerformanceMetrics,
 } from "@jsenv/performance-impact"
+import { writeFile, resolveUrl, urlToRelativeUrl } from "@jsenv/filesystem"
 
 import { createWorkers } from "@jsenv/workers"
+import {
+  // arrayBufferFromBuffer,
+  arrayBufferFromString,
+  stringFromArrayBuffer,
+} from "@jsenv/workers/src/internal/array_buffer_conversion.js"
 import {
   setupTransformCalls,
   loadBabelPluginMapFromFile,
 } from "./babel_transform_utils.mjs"
-import { arrayBufferFromString } from "./array_buffer_conversion.mjs"
 
 // 1 worker -> perf better than main thread
 // more than 1 worker -> perf worse than main thread
@@ -32,6 +37,7 @@ const measureBabelTransformOnWorkerThreads = async ({
   const metrics = await measurePerformanceMultipleTimes(
     async () => {
       const projectDirectoryUrl = new URL("./", import.meta.url)
+      const basicAppDirectoryUrl = new URL("./basic_app/", import.meta.url)
       const transformCalls = await setupTransformCalls()
       // we know babel plugin map before hand
       // in the worker approach we'll need pass only the names
@@ -43,7 +49,6 @@ const measureBabelTransformOnWorkerThreads = async ({
       Object.keys(babelPluginMap).forEach((key) => {
         babelPluginConfig[key] = babelPluginMap[key].options
       })
-
       transformCalls.forEach((call) => {
         call.babelPluginConfig = babelPluginConfig
         call.buffer = arrayBufferFromString(call.code)
@@ -57,14 +62,29 @@ const measureBabelTransformOnWorkerThreads = async ({
       })
       await new Promise((resolve) => setTimeout(resolve, 500))
 
+      const files = {}
       const startMs = Date.now()
       await Promise.all(
-        transformCalls.map(async ({ buffer, ...call }) => {
-          await workers.addJob(call, [buffer])
+        transformCalls.map(async ({ buffer, url, babelPluginConfig }) => {
+          const result = await workers.addJob({ url, babelPluginConfig }, [
+            buffer,
+          ])
+          files[url] = result.code
         }),
       )
       const endMs = Date.now()
       const msEllapsed = endMs - startMs
+
+      await Promise.all(
+        Object.keys(files).map(async (url) => {
+          const relativeUrl = urlToRelativeUrl(url, basicAppDirectoryUrl)
+          const distUrl = resolveUrl(
+            relativeUrl,
+            new URL("./dist/", import.meta.url),
+          )
+          await writeFile(distUrl, stringFromArrayBuffer(files[url]))
+        }),
+      )
 
       return {
         [`time to transform ${transformCalls.length} files using ${WORKERS_COUNT} workers`]:
@@ -80,7 +100,7 @@ const measureBabelTransformOnWorkerThreads = async ({
   return computeMetricsMedian(metrics)
 }
 
-const executeAndLog = process.argv.includes("--local")
+const executeAndLog = process.argv.includes("--local") || true
 if (executeAndLog) {
   const performanceMetrics = await measureBabelTransformOnWorkerThreads({
     iterations: 1,

@@ -8,14 +8,23 @@ import { transform } from "./transform.mjs"
 
 const require = createRequire(import.meta.url)
 
-parentPort.on("message", async ({ babelPluginConfig, buffer, ...rest }) => {
+parentPort.on("message", async ({ buffer, url, babelPluginConfig }) => {
   const babelPluginMap = babelPluginMapFromBabelPluginConfig(babelPluginConfig)
   const { code, map, metadata } = await transform({
     babelPluginMap,
     code: stringFromArrayBuffer(buffer),
-    ...rest,
+    url,
   })
-  parentPort.postMessage({ map, metadata }, [arrayBufferFromString(code)])
+
+  const codeAsArrayBuffer = arrayBufferFromString(code)
+  parentPort.postMessage(
+    {
+      // code: codeAsArrayBuffer,
+      map,
+      metadata,
+    },
+    [codeAsArrayBuffer],
+  )
 })
 
 const babelPluginMapFromBabelPluginConfig = (babelPluginConfig) => {

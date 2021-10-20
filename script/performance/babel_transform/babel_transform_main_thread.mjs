@@ -13,6 +13,7 @@ import {
   computeMetricsMedian,
   logPerformanceMetrics,
 } from "@jsenv/performance-impact"
+import { writeFile, resolveUrl, urlToRelativeUrl } from "@jsenv/filesystem"
 
 import {
   setupTransformCalls,
@@ -24,6 +25,7 @@ const measureBabelTransformOnMainThread = async ({ iterations = 5 } = {}) => {
   const metrics = await measurePerformanceMultipleTimes(
     async () => {
       const projectDirectoryUrl = new URL("./", import.meta.url)
+      const basicAppDirectoryUrl = new URL("./basic_app/", import.meta.url)
       const transformCalls = await setupTransformCalls()
       // we know babel plugin map before hand
       // in the worker approach we'll need pass only the names
@@ -36,14 +38,27 @@ const measureBabelTransformOnMainThread = async ({ iterations = 5 } = {}) => {
       })
       await new Promise((resolve) => setTimeout(resolve, 500))
 
+      const files = {}
       const startMs = Date.now()
       await Promise.all(
-        transformCalls.map(async (call) => {
-          await transform(call)
+        transformCalls.map(async ({ url, code, babelPluginMap }) => {
+          const result = await transform({ url, code, babelPluginMap })
+          files[url] = result.code
         }),
       )
       const endMs = Date.now()
       const msEllapsed = endMs - startMs
+
+      await Promise.all(
+        Object.keys(files).map(async (url) => {
+          const relativeUrl = urlToRelativeUrl(url, basicAppDirectoryUrl)
+          const distUrl = resolveUrl(
+            relativeUrl,
+            new URL("./dist/", import.meta.url),
+          )
+          await writeFile(distUrl, files[url])
+        }),
+      )
 
       return {
         [`time to transform ${transformCalls.length} files on main thread`]: {

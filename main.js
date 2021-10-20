@@ -6,3 +6,7 @@
 
 export { createWorkers } from "./src/createWorkers.js"
 export { createWorkersForJavaScriptModules } from "./src/createWorkersForJavaScriptModules.js"
+export {
+  optimizeValueForPostMessage,
+  recomposeValueFromPostMessage,
+} from "./src/post_message_optimization.js"

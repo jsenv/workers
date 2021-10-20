@@ -3,6 +3,10 @@ export const stringFromArrayBuffer = (arrayBuffer) => {
   return String.fromCharCode.apply(null, new Uint16Array(arrayBuffer))
 }
 
+// const stringFromArrayBuffer = (arrayBuffer) => {
+//   return new TextDecoder().decode(arrayBuffer)
+// }
+
 export const arrayBufferFromString = (string) => {
   var buf = new ArrayBuffer(string.length * 2) // 2 bytes for each char
   var bufView = new Uint16Array(buf)
@@ -11,6 +15,10 @@ export const arrayBufferFromString = (string) => {
   }
   return buf
 }
+
+// const arrayBufferFromString = (string) => {
+//   return new TextEncoder().encode(string).buffer
+// }
 
 // https://stackoverflow.com/a/12101012
 export const bufferFromArrayBuffer = (arrayBuffer) => {
