@@ -26,9 +26,6 @@ import {
   loadBabelPluginMapFromFile,
 } from "./babel_transform_utils.mjs"
 
-// 1 worker -> perf better than main thread
-// more than 1 worker -> perf worse than main thread
-// ¯\_(ツ)_/¯
 const WORKERS_COUNT = 1
 
 const measureBabelTransformOnWorkerThreads = async ({
