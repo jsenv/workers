@@ -5,3 +5,4 @@
  */
 
 export { createWorkers } from "./src/createWorkers.js"
+export { createWorkersForJavaScriptModules } from "./src/createWorkersForJavaScriptModules.js"
