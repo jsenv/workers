@@ -10,7 +10,7 @@ createWorkers({
   ...TEST_PARAMS,
   workerFileUrl,
   minWorkers: 1,
-  logLevel: "debug",
+  // logLevel: "debug",
   handleSIGINT: false,
   maxIdleDuration: Infinity,
 })
