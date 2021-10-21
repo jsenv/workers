@@ -58,7 +58,7 @@ export const createWorkersForJavaScriptModules = (methods, options) => {
     ...options,
   })
 
-  return methodHooks
+  return { methodHooks, workers }
 }
 
 const extractHashFromUrl = (url) => {

@@ -13,7 +13,7 @@ const measurePrimbeNumbersOnWorkerThreads = async ({ iterations = 5 } = {}) => {
       const startMs = Date.now()
 
       const workerCount = 4
-      const workers = createWorkersForJavaScriptModules(
+      const { methodHooks } = createWorkersForJavaScriptModules(
         {
           generatePrimes: `${new URL(
             "./generate_primes.mjs",
@@ -33,7 +33,7 @@ const measurePrimbeNumbersOnWorkerThreads = async ({ iterations = 5 } = {}) => {
         new Array(workerCount).fill("").map(async () => {
           const workerStart = start
           start += range
-          const primesFromWorker = await workers.generatePrimes(
+          const primesFromWorker = await methodHooks.generatePrimes(
             workerStart,
             range,
           )
