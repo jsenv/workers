@@ -36,6 +36,10 @@ export const createWorkers = ({
   env,
   handleSIGINT = true,
 }) => {
+  if (minWorkers < 0) {
+    minWorkers = 0
+  }
+
   workerFileUrl = assertAndNormalizeFileUrl(workerFileUrl)
 
   const logger = createLogger({ logLevel })
@@ -402,7 +406,7 @@ export const createWorkers = ({
   }
 
   if (minWorkers > 0) {
-    let numberOfWorkerToCreate = minWorkers
+    let numberOfWorkerToCreate = Math.ceil(minWorkers)
     logger.debug(
       `create ${numberOfWorkerToCreate} initial worker(s) according to "minWorkers"`,
     )
