@@ -1,0 +1,6 @@
+{
+  "depedencies": {
+    "foo": "*"
+
+  }
+}
