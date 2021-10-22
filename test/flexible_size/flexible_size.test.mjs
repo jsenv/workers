@@ -4,9 +4,8 @@ import { createWorkers } from "@jsenv/workers"
 import * as TEST_PARAMS from "@jsenv/workers/test/TEST_PARAMS.mjs"
 
 const workerFileUrl = new URL("./worker.mjs", import.meta.url)
-const workers = createWorkers({
+const workers = createWorkers(workerFileUrl, {
   ...TEST_PARAMS,
-  workerFileUrl,
   minWorkers: 2,
   maxWorkers: 4,
   // logLevel: "debug",

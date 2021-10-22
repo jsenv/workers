@@ -51,12 +51,14 @@ const measureBabelTransformOnWorkerThreads = async ({
         call.buffer = arrayBufferFromString(call.code)
         delete call.code
       })
-      const workers = createWorkers({
-        workerFileUrl: new URL("./transform_worker.mjs", import.meta.url),
-        minWorkers: WORKERS_COUNT,
-        maxWorkers: WORKERS_COUNT,
-        maxIdleDuration: 2000,
-      })
+      const workers = createWorkers(
+        new URL("./transform_worker.mjs", import.meta.url),
+        {
+          minWorkers: WORKERS_COUNT,
+          maxWorkers: WORKERS_COUNT,
+          maxIdleDuration: 2000,
+        },
+      )
       await new Promise((resolve) => setTimeout(resolve, 500))
 
       const files = {}

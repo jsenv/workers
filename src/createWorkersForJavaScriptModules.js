@@ -1,9 +1,10 @@
 import { createWorkers } from "./createWorkers.js"
 
-const workerControllingJavaScriptModulesUrl = new URL(
-  "./internal/worker_controlling_javascript_modules.js",
-  import.meta.url,
-)
+// not used anymore, for now we prefer the simplicity of passing a function
+// const workerControllingJavaScriptModulesUrl = new URL(
+//   "./internal/worker_controlling_javascript_modules.js",
+//   import.meta.url,
+// )
 
 export const createWorkersForJavaScriptModules = (methods, options) => {
   let workers
@@ -49,14 +50,22 @@ export const createWorkersForJavaScriptModules = (methods, options) => {
     }
   })
 
-  workers = createWorkers({
-    workerFileUrl: workerControllingJavaScriptModulesUrl,
-    workerData: {
-      // urls that will be pre-imported by the worker on initialisation
-      urls: Array.from(urlSet.values()),
+  workers = createWorkers(
+    async ({ url, exportName, args }) => {
+      const namespace = await import(url)
+      const method = namespace[exportName]
+      const returnValue = await method(...args)
+      return returnValue
     },
-    ...options,
-  })
+    {
+      workerData: {
+        // urls that will be pre-imported by the worker on initialisation
+        // well not anymore for now
+        // urls: Array.from(urlSet.values()),
+      },
+      ...options,
+    },
+  )
 
   return { methodHooks, workers }
 }

@@ -21,9 +21,7 @@ _main.mjs:_
 ```js
 import { createWorkers } from "@jsenv/workers"
 
-const workers = createWorkers({
-  workerFileUrl: new URL("./worker.mjs", import.meta.url),
-})
+const workers = createWorkers(new URL("./worker.mjs", import.meta.url))
 
 const value = await workers.addJob({ a: 1, b: 1 })
 console.log(value) // 2
@@ -36,8 +34,7 @@ By default the pool size is dynamic but it can be fixed to X workers.
 ```js
 import { createWorkers } from "@jsenv/workers"
 
-const workers = createWorkers({
-  workerFileUrl: new URL("./worker.mjs"),
+const workers = createWorkers(new URL("./worker.mjs"), {
   minWorkers: 10,
   maxWorkers: 10,
 })

@@ -8,9 +8,8 @@ const exceptions = []
 process.on("uncaughtException", (error) => {
   exceptions.push(error)
 })
-createWorkers({
+createWorkers(workerFileUrl, {
   ...TEST_PARAMS,
-  workerFileUrl,
   logLevel: "off",
   minWorkers: 2,
 })

@@ -6,11 +6,9 @@ import { Worker } from "node:worker_threads"
 import { AsyncResource, executionAsyncId } from "node:async_hooks"
 import { cpus } from "node:os"
 import { createLogger } from "@jsenv/logger"
-import {
-  assertAndNormalizeFileUrl,
-  urlToFileSystemPath,
-} from "@jsenv/filesystem"
+import { assertAndNormalizeFileUrl } from "@jsenv/filesystem"
 
+import { stringifyDataUrl } from "@jsenv/workers/src/internal/base64_url.js"
 import { createIntegerGenerator } from "@jsenv/workers/src/internal/integer_generator.js"
 import { raceCallbacks } from "@jsenv/workers/src/internal/race.js"
 
@@ -22,28 +20,29 @@ const cpuCount = (() => {
   }
 })()
 
-export const createWorkers = ({
-  workerFileUrl,
-  workerData,
-  minWorkers = Math.max(cpuCount / 2, 1),
-  maxWorkers = cpuCount * 1.5,
-  logLevel = "info",
-  maxIdleDuration = 0,
-  maxWaitingJobs = Number.MAX_SAFE_INTEGER,
-  keepProcessAlive = false,
-  execArgv,
-  argv,
-  env,
-  handleSIGINT = true,
-}) => {
+export const createWorkers = (
+  workerFileUrlOrFunction,
+  {
+    workerData,
+    minWorkers = Math.max(cpuCount / 2, 1),
+    maxWorkers = cpuCount * 1.5,
+    logLevel = "info",
+    maxIdleDuration = 0,
+    maxWaitingJobs = Number.MAX_SAFE_INTEGER,
+    keepProcessAlive = false,
+    execArgv,
+    argv,
+    env,
+    handleSIGINT = true,
+  } = {},
+) => {
   if (minWorkers < 0) {
     minWorkers = 0
   }
 
-  workerFileUrl = assertAndNormalizeFileUrl(workerFileUrl)
+  const nodeWorkerFactory = getNodeWorkerFactory(workerFileUrlOrFunction)
 
   const logger = createLogger({ logLevel })
-  const workerFilePath = urlToFileSystemPath(workerFileUrl)
 
   const workerIdGenerator = createIntegerGenerator()
   const jobIdGenerator = createIntegerGenerator()
@@ -81,7 +80,7 @@ export const createWorkers = ({
   const createWorker = () => {
     const worker = {
       id: workerIdGenerator(),
-      nodeWorker: new Worker(workerFilePath, {
+      nodeWorker: nodeWorkerFactory({
         workerData,
         execArgv,
         argv,
@@ -424,6 +423,44 @@ export const createWorkers = ({
 
     // for unit test
     addWorker,
+  }
+}
+
+const getNodeWorkerFactory = (workerFileUrlOrFunction) => {
+  if (typeof workerFileUrlOrFunction === "function") {
+    const code = `import { parentPort } from "worker_threads"
+
+const doWork = ${workerFileUrlOrFunction.toString()}
+
+parentPort.on('message', async (args) => {
+  const res = await doWork(args)
+  parentPort.postMessage(res)
+})`
+
+    const codeAsDataUrl = stringifyDataUrl({
+      data: code,
+      base64Flag: true,
+      mediaType: "text/javascript",
+    })
+    const codeAsUrlObject = new URL(codeAsDataUrl)
+
+    return (params) => {
+      return new Worker(codeAsUrlObject, {
+        // cannot use eval because Node.js treat code as .cjs
+        // we could replace import by require but I prefer code
+        // to be treated as ESM so that code inside workerFileUrlOrFunction
+        // can use things like import.meta.url
+        // eval: true,
+        ...params,
+      })
+    }
+  }
+
+  const workerFileUrl = new URL(
+    assertAndNormalizeFileUrl(workerFileUrlOrFunction),
+  )
+  return (params) => {
+    return new Worker(workerFileUrl, params)
   }
 }
 

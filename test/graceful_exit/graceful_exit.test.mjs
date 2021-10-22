@@ -6,9 +6,8 @@ import * as TEST_PARAMS from "@jsenv/workers/test/TEST_PARAMS.mjs"
 // const why = require("why-is-node-running")
 
 const workerFileUrl = new URL("./worker.mjs", import.meta.url)
-createWorkers({
+createWorkers(workerFileUrl, {
   ...TEST_PARAMS,
-  workerFileUrl,
   minWorkers: 1,
   // logLevel: "debug",
   handleSIGINT: false,
