@@ -8,7 +8,6 @@ import { cpus } from "node:os"
 import { createLogger } from "@jsenv/logger"
 import { assertAndNormalizeFileUrl } from "@jsenv/filesystem"
 
-import { stringifyDataUrl } from "@jsenv/workers/src/internal/base64_url.js"
 import { createIntegerGenerator } from "@jsenv/workers/src/internal/integer_generator.js"
 import { raceCallbacks } from "@jsenv/workers/src/internal/race.js"
 
@@ -21,7 +20,7 @@ const cpuCount = (() => {
 })()
 
 export const createWorkers = (
-  workerFileUrlOrFunction,
+  workerFileUrl,
   {
     workerData,
     minWorkers = Math.max(cpuCount / 2, 1),
@@ -40,7 +39,7 @@ export const createWorkers = (
     minWorkers = 0
   }
 
-  const nodeWorkerFactory = getNodeWorkerFactory(workerFileUrlOrFunction)
+  const nodeWorkerFactory = getNodeWorkerFactory(workerFileUrl)
 
   const logger = createLogger({ logLevel })
 
@@ -426,39 +425,12 @@ export const createWorkers = (
   }
 }
 
-const getNodeWorkerFactory = (workerFileUrlOrFunction) => {
-  if (typeof workerFileUrlOrFunction === "function") {
-    const code = `import { parentPort } from "worker_threads"
+const getNodeWorkerFactory = (workerFileUrl) => {
+  workerFileUrl =
+    workerFileUrl instanceof URL
+      ? workerFileUrl
+      : new URL(assertAndNormalizeFileUrl(workerFileUrl))
 
-const doWork = ${workerFileUrlOrFunction.toString()}
-
-parentPort.on('message', async (args) => {
-  const res = await doWork(args)
-  parentPort.postMessage(res)
-})`
-
-    const codeAsDataUrl = stringifyDataUrl({
-      data: code,
-      base64Flag: true,
-      mediaType: "text/javascript",
-    })
-    const codeAsUrlObject = new URL(codeAsDataUrl)
-
-    return (params) => {
-      return new Worker(codeAsUrlObject, {
-        // cannot use eval because Node.js treat code as .cjs
-        // we could replace import by require but I prefer code
-        // to be treated as ESM so that code inside workerFileUrlOrFunction
-        // can use things like import.meta.url
-        // eval: true,
-        ...params,
-      })
-    }
-  }
-
-  const workerFileUrl = new URL(
-    assertAndNormalizeFileUrl(workerFileUrlOrFunction),
-  )
   return (params) => {
     return new Worker(workerFileUrl, params)
   }

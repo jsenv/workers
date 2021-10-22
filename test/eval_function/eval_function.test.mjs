@@ -1,13 +1,13 @@
 import { assert } from "@jsenv/assert"
 
-import { createWorkers } from "@jsenv/workers"
+import { createWorkers, functionAsWorkerUrl } from "@jsenv/workers"
 import * as TEST_PARAMS from "@jsenv/workers/test/TEST_PARAMS.mjs"
 
 const workers = createWorkers(
-  async (input) => {
+  functionAsWorkerUrl(async (input) => {
     const output = await Promise.resolve(input + 1)
     return output
-  },
+  }),
   { ...TEST_PARAMS },
 )
 

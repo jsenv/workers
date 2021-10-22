@@ -1,4 +1,5 @@
 import { createWorkers } from "./createWorkers.js"
+import { functionAsWorkerUrl } from "./functionAsWorkerUrl.js"
 
 // not used anymore, for now we prefer the simplicity of passing a function
 // const workerControllingJavaScriptModulesUrl = new URL(
@@ -51,12 +52,12 @@ export const createWorkersForJavaScriptModules = (methods, options) => {
   })
 
   workers = createWorkers(
-    async ({ url, exportName, args }) => {
+    functionAsWorkerUrl(async ({ url, exportName, args }) => {
       const namespace = await import(url)
       const method = namespace[exportName]
       const returnValue = await method(...args)
       return returnValue
-    },
+    }),
     {
       workerData: {
         // urls that will be pre-imported by the worker on initialisation

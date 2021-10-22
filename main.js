@@ -5,4 +5,6 @@
  */
 
 export { createWorkers } from "./src/createWorkers.js"
+export { functionAsWorkerUrl } from "./src/functionAsWorkerUrl.js"
+
 export { createWorkersForJavaScriptModules } from "./src/createWorkersForJavaScriptModules.js"
